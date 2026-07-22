@@ -8,12 +8,14 @@ final class NALParsingTests: XCTestCase {
     // MARK: - Annex B
 
     func testAnnexBSplitsOnStartCodes() {
-        // [start4] 0x67 0x42 0x00  [start3] 0x68 0xCE
-        let data = Data([0, 0, 0, 1, 0x67, 0x42, 0x00, 0, 0, 1, 0x68, 0xCE])
+        // [start4] 0x67 0x42 0x11  [start3] 0x68 0xCE
+        // (evita terminar o 1º NAL em 0x00 colado ao start code — isso formaria
+        //  ambiguamente um start code de 4 bytes, que é o comportamento padrão correto.)
+        let data = Data([0, 0, 0, 1, 0x67, 0x42, 0x11, 0, 0, 1, 0x68, 0xCE])
         let units = NALUnit.annexBUnits(in: data)
 
         XCTAssertEqual(units.count, 2)
-        XCTAssertEqual([UInt8](units[0]), [0x67, 0x42, 0x00])
+        XCTAssertEqual([UInt8](units[0]), [0x67, 0x42, 0x11])
         XCTAssertEqual([UInt8](units[1]), [0x68, 0xCE])
     }
 
