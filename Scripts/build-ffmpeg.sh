@@ -91,12 +91,14 @@ lipo_sdk() {
 main() {
   clone_ffmpeg
 
+  # Só arm64: o runner da CI e os dispositivos (iPad/iPhone) são todos ARM. A fatia x86_64
+  # do simulador exigiria nasm (ausente no runner) e só serviria para Mac Intel — que não
+  # existe neste cenário. Dropar remove a dependência de nasm e acelera a build.
   build_arch iphoneos        arm64
   build_arch iphonesimulator arm64
-  build_arch iphonesimulator x86_64
 
   lipo_sdk iphoneos        arm64
-  lipo_sdk iphonesimulator arm64 x86_64
+  lipo_sdk iphonesimulator arm64
 
   rm -rf "$OUT"
   xcodebuild -create-xcframework \
