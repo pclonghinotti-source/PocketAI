@@ -1,0 +1,60 @@
+# XcodeGen — gera PocketAI.xcodeproj a partir deste texto (roda no Mac da CI).
+# Você nunca precisa abrir/editar o .xcodeproj à mão no Windows.
+#
+# Uso (no runner macOS): `brew install xcodegen && xcodegen generate`
+#
+# ⚠️ VERIFICAR/AJUSTAR NA CI: o wiring do módulo C `CFFmpeg` (module.modulemap + headers do
+# FFmpeg.xcframework) é a parte mais provável de precisar de ajuste fino na primeira build real.
+name: PocketAI
+
+options:
+  bundleIdPrefix: com.pocketai
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  CocoaMQTT:
+    url: https://github.com/emqx/CocoaMQTT.git
+    from: "2.1.0"
+
+targets:
+  PocketAI:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - App
+      - DI
+      - path: Core
+        excludes:
+          - "Pipeline/Mocks/**"     # mocks/harness são só para testes (SwiftPM), não vão no app
+      - path: Camera
+        excludes:
+          - "CFFmpeg/**"            # o xcframework/modulemap entram via dependência + include path
+          - "README-FFmpeg.md"
+      - path: AI
+        excludes:
+          - "README.md"
+      - path: MQTT
+        excludes:
+          - "README.md"
+      - Settings
+      - Features
+      - path: Resources           # onde fica o .mlpackage do YOLO
+        optional: true
+    dependencies:
+      - package: CocoaMQTT
+      - framework: Camera/CFFmpeg/FFmpeg.xcframework
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pocketai.app
+        INFOPLIST_FILE: App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"          # universal: roda nativo no iPad A14 e no iPhone 8
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # Permite `import CFFmpeg` achar o Camera/CFFmpeg/module.modulemap.
+        SWIFT_INCLUDE_PATHS: "$(SRCROOT)/Camera/CFFmpeg"
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"

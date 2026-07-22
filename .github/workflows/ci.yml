@@ -1,0 +1,41 @@
+name: CI
+
+# Roda os testes do módulo Core (Módulos 1–2 + parsing do Módulo 3) num Mac na nuvem.
+# Para OSS público, os runners macOS da GitHub Actions são gratuitos — build/testes sem Mac local.
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: swift test (Core, macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      # Só o pacote Core (Package.swift) é testado aqui — sem FFmpeg/Xcode de app.
+      - name: Run unit tests
+        run: swift test --parallel
+
+  # Placeholder do build iOS completo (app + Camera/FFmpeg) — a habilitar quando houver
+  # o alvo do app (XcodeGen) e o FFmpeg.xcframework em cache. Mantido documentado, desligado.
+  #
+  # ios-build:
+  #   name: build iOS app (simulator)
+  #   runs-on: macos-14
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build FFmpeg (cacheado)
+  #       run: ./Scripts/build-ffmpeg.sh
+  #     - name: Generate Xcode project
+  #       run: xcodegen generate
+  #     - name: Build for simulator
+  #       run: xcodebuild -scheme PocketAI -destination 'platform=iOS Simulator,name=iPhone 15' build

@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Xcode / build
+build/
+DerivedData/
+.swiftpm/
+.build/
+# .xcodeproj é gerado pelo XcodeGen a partir de project.yml (não versionar)
+*.xcodeproj
+
+# FFmpeg (gerado por Scripts/build-ffmpeg.sh; a CI reconstrói e cacheia)
+Scripts/.ffmpeg-src/
+Scripts/.ffmpeg-build/
+Camera/CFFmpeg/FFmpeg.xcframework/
+
+# Python (export do modelo YOLO)
+__pycache__/
+*.pyc
+# pesos YOLO baixados pelo ultralytics
+*.pt
+
+# Artefatos locais
+*.ipa
+Payload/
+
+# .mlpackage é gerado pela CI (runner macOS) durante a build iOS — não precisa versionar
+Resources/*.mlpackage/

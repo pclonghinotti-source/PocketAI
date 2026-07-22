@@ -1,0 +1,3 @@
+# Força LF em todos os arquivos de texto. A build roda em macOS/Linux (GitHub Actions);
+# CRLF quebraria scripts shell (ex.: Scripts/build-ffmpeg.sh) e é indesejável em fontes Swift.
+* text=auto eol=lf

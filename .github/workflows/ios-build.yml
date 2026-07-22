@@ -1,0 +1,66 @@
+name: iOS Build (unsigned IPA)
+
+# Build pesado sob demanda (não roda a cada push — os testes rápidos ficam em ci.yml).
+# Produz um .ipa NÃO ASSINADO como artefato; o AltStore assina na instalação no iPad/iPhone.
+#
+# ⚠️ Este job é o mais provável de precisar de iteração na primeira execução real
+# (wiring do FFmpeg.xcframework + CFFmpeg, dependência CocoaMQTT, presença do .mlpackage).
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # FFmpeg é caro de compilar; cacheia o xcframework entre execuções.
+      - name: Cache FFmpeg xcframework
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: Camera/CFFmpeg/FFmpeg.xcframework
+          key: ffmpeg-xcframework-${{ hashFiles('Scripts/build-ffmpeg.sh') }}
+
+      - name: Build FFmpeg (se não cacheado)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash Scripts/build-ffmpeg.sh
+
+      # Gera o .mlpackage do YOLO no runner macOS (CoreML export não roda no Windows).
+      - name: Gerar modelo YOLO (CoreML)
+        run: |
+          python3 -m pip install --quiet ultralytics coremltools
+          python3 Scripts/export-yolo-coreml.py --model yolo11n.pt --imgsz 320 --out Resources
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (sem assinatura)
+        run: |
+          xcodebuild \
+            -project PocketAI.xcodeproj \
+            -scheme PocketAI \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      # Empacota o .app num .ipa (Payload/), sem assinar — formato que o AltStore aceita.
+      - name: Package IPA
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/PocketAI.app"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r PocketAI-unsigned.ipa Payload
+          rm -rf Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketAI-unsigned-ipa
+          path: PocketAI-unsigned.ipa

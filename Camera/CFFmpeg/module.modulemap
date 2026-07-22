@@ -1,0 +1,11 @@
+// Módulo de interoperabilidade C: torna os cabeçalhos do FFmpeg importáveis do Swift
+// como `import CFFmpeg`. As bibliotecas em si vêm do FFmpeg.xcframework linkado no target.
+//
+// Wiring no Xcode:
+//  1. Rode Scripts/build-ffmpeg.sh (em macOS) → gera Camera/CFFmpeg/FFmpeg.xcframework.
+//  2. Arraste o .xcframework para o target (Frameworks, Libraries, and Embedded Content).
+//  3. Em Build Settings → Import Paths (SWIFT_INCLUDE_PATHS), adicione a pasta CFFmpeg.
+module CFFmpeg {
+    header "shim.h"
+    export *
+}
