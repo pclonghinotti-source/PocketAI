@@ -43,7 +43,11 @@ clone_ffmpeg() {
 
 # build_arch <sdk> <arch> <target-os>
 build_arch() {
-  local sdk="$1" arch="$2" prefix="$WORK/$sdk-$arch"
+  # NÃO juntar num único `local`: sob `set -u`, `prefix` expandiria $sdk/$arch
+  # antes de eles serem atribuídos (expansão ocorre antes das atribuições).
+  local sdk="$1"
+  local arch="$2"
+  local prefix="$WORK/$sdk-$arch"
   local sysroot; sysroot="$(xcrun --sdk "$sdk" --show-sdk-path)"
   local cc; cc="$(xcrun --sdk "$sdk" -f clang)"
   local minflag
