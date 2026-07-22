@@ -33,7 +33,7 @@ jobs:
       # Gera o .mlpackage do YOLO no runner macOS (CoreML export não roda no Windows).
       - name: Gerar modelo YOLO (CoreML)
         run: |
-          python3 -m pip install --quiet ultralytics coremltools
+          python3 -m pip install --quiet --break-system-packages ultralytics coremltools
           python3 Scripts/export-yolo-coreml.py --model yolo11n.pt --imgsz 320 --out Resources
 
       - name: Generate Xcode project
