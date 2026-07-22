@@ -47,6 +47,20 @@ targets:
       - package: CocoaMQTT
       - framework: Camera/CFFmpeg/FFmpeg.xcframework
         embed: true
+      # O libffmpeg.a referencia iconv/zlib/bzlib e frameworks que a config do FFmpeg
+      # habilitou (securetransport, avfoundation, etc). Sem declarar aqui, o linker
+      # acusa "Undefined symbols" (_iconv, _inflate, ...).
+      - sdk: libz.tbd
+      - sdk: libiconv.tbd
+      - sdk: libbz2.tbd
+      - sdk: Security.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreVideo.framework
+      - sdk: VideoToolbox.framework
+      - sdk: AudioToolbox.framework
+      - sdk: Metal.framework
+      - sdk: CoreImage.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pocketai.app
