@@ -68,5 +68,5 @@ final class NenaoCharacter: SCNNode {
     }
 
     required init?(coder: NSCoder) { nil }
-    func wave(progress: CGFloat) { rightArm.eulerAngles.z = -0.5 + sin(progress * .pi * 3) * 0.3 }
+    func wave(progress: CGFloat) { rightArm.eulerAngles.z = Float(-0.5 + sin(progress * .pi * 3) * 0.3) }
 }

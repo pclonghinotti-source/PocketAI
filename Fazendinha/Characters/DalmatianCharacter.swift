@@ -75,5 +75,5 @@ final class DalmatianCharacter: SCNNode {
     }
 
     required init?(coder: NSCoder) { nil }
-    func wagTail(progress: CGFloat) { tailNode.eulerAngles.z = 0.4 + sin(progress * .pi * 4) * 0.3 }
+    func wagTail(progress: CGFloat) { tailNode.eulerAngles.z = Float(0.4 + sin(progress * .pi * 4) * 0.3) }
 }

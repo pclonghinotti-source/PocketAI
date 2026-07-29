@@ -105,7 +105,7 @@ final class ManuCharacter: SCNNode {
 
     // MARK: – Animação de caminhada (balanço simples)
     func walkAnimation(progress: CGFloat) {
-        let swing = sin(progress * .pi * 2) * 0.2
+        let swing = Float(sin(progress * .pi * 2) * 0.2)
         leftArm.eulerAngles.z   = swing
         rightArm.eulerAngles.z  = -swing
         leftLeg.eulerAngles.z   = -swing * 0.5

@@ -77,7 +77,7 @@ enum FarmWorldBuilder {
         sun.light?.color = UIColor(white: 0.9, alpha: 1)
         sun.light?.castsShadow = true
         sun.light?.shadowMode = .deferred
-        sun.eulerAngles = SCNVector3(-.pi / 4, .pi / 4, 0)
+        sun.eulerAngles = SCNVector3(-Float.pi / 4, Float.pi / 4, 0)
         world.addChildNode(sun)
 
         return world

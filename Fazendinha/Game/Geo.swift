@@ -29,6 +29,19 @@ extension UIColor {
     static let carrot            = #colorLiteral(red: 0.95, green: 0.45, blue: 0.12, alpha: 1.0)
 }
 
+// MARK: – Hit-testing helpers
+extension SCNNode {
+    /// SceneKit não tem isso nativo (é coisa de UIView/NSView) — sobe a cadeia de pais.
+    func isDescendant(of ancestor: SCNNode) -> Bool {
+        var current: SCNNode? = parent
+        while let node = current {
+            if node == ancestor { return true }
+            current = node.parent
+        }
+        return false
+    }
+}
+
 // MARK: – Fábrica de geometrias cartoon
 enum Geo {
     static func material(_ color: UIColor, roughness: CGFloat = 0.85,

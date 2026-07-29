@@ -4,7 +4,7 @@ import SceneKit
 final class FarmGameScene: SCNScene, SCNSceneRendererDelegate {
 
     // MARK: – Referências
-    private let gameState: GameState
+    let gameState: GameState
     private let speech: SpeechManager
 
     private let manu: ManuCharacter
