@@ -20,16 +20,25 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # Os erros são reemitidos como ::error:: para virarem annotations, visíveis
+      # na API pública do run — dá pra diagnosticar sem baixar o log completo.
       - name: Build (sem assinatura)
         run: |
-          xcodebuild \
+          set -o pipefail
+          if ! xcodebuild \
             -project PocketAI.xcodeproj \
             -scheme Fazendinha \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build
+            build 2>&1 | tee build.log
+          then
+            grep -E '(error|warning): ' build.log | sort -u | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
 
       - name: Package IPA
         run: |
