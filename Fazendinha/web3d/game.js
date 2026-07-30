@@ -53,13 +53,16 @@ const CULTURAS = {
   abobora:  { nome: 'Abóbora',  emoji: '🎃', cresce: 90, estrelas: 4, cor: 0xef911f, topo: 0x4a9a30 },
 };
 
+// `onde` marca o ponto do mapa que a missão pede — vira uma seta
+// flutuante no mundo, para a criança saber para onde ir.
 const MISSOES = [
-  { id: 'colheita', icone: '🥕', titulo: 'Colha 1 cenourinha!', alvo: 1, evento: 'colheuCenoura', premio: 3 },
-  { id: 'regar',    icone: '💧', titulo: 'Regue 3 canteiros',   alvo: 3, evento: 'regou',          premio: 3 },
-  { id: 'carinho',  icone: '🐄', titulo: 'Faça carinho em 3 bichinhos', alvo: 3, evento: 'carinho', premio: 4 },
-  { id: 'ovo',      icone: '🥚', titulo: 'Pegue um ovinho',     alvo: 1, evento: 'pegouOvo',       premio: 3 },
-  { id: 'camisa',   icone: '👕', titulo: 'Ache a camisa do Nenão', alvo: 1, evento: 'achouCamisa', premio: 5 },
-  { id: 'colher5',  icone: '🧺', titulo: 'Colha 5 plantinhas',  alvo: 5, evento: 'colheu',         premio: 5 },
+  { id: 'colheita', icone: '🥕', titulo: 'Colha 1 cenourinha!', alvo: 1, evento: 'colheuCenoura', premio: 3, onde: 'canteiros' },
+  { id: 'regar',    icone: '💧', titulo: 'Regue 3 canteiros',   alvo: 3, evento: 'regou',          premio: 3, onde: 'canteiros' },
+  { id: 'alimentar',icone: '🌾', titulo: 'Encha o cocho de comida', alvo: 1, evento: 'alimentou',  premio: 4, onde: 'cocho' },
+  { id: 'carinho',  icone: '🐄', titulo: 'Faça carinho em 3 bichinhos', alvo: 3, evento: 'carinho', premio: 4, onde: 'animais' },
+  { id: 'ovo',      icone: '🥚', titulo: 'Pegue um ovinho no chão', alvo: 1, evento: 'pegouOvo',   premio: 3, onde: 'ovo' },
+  { id: 'camisa',   icone: '👕', titulo: 'Ache a camisa do Nenão', alvo: 1, evento: 'achouCamisa', premio: 5, onde: 'camisa' },
+  { id: 'colher5',  icone: '🧺', titulo: 'Colha 5 plantinhas',  alvo: 5, evento: 'colheu',         premio: 5, onde: 'canteiros' },
 ];
 
 const ANIMAIS = [
@@ -380,12 +383,15 @@ function peMilho(x, z) {
   const caule = cilindro(0.05, 0.07, 1.5, mat(PALETA.milhoFolha, { roughness: 0.9 }), 8);
   caule.position.y = 0.75;
   g.add(caule);
+  // Folhas: lâminas compridas apontando para cima e caindo nas pontas.
+  // Achatar a esfera no eixo Y (como antes) deitava a folha e o pé de
+  // milho virava uma mesa verde.
   for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2 + Math.random();
-    const folha = esfera(0.30, mat(PALETA.milhoFolha, { roughness: 0.9 }), 0.16);
-    folha.scale.z = 1.7;
-    folha.position.set(Math.cos(a) * 0.22, 0.55 + i * 0.2, Math.sin(a) * 0.22);
-    folha.rotation.set(0.5, -a, 0.4);
+    const a = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
+    const folha = esfera(0.5, mat(PALETA.milhoFolha, { roughness: 0.9 }), 1);
+    folha.scale.set(0.14, 0.62, 0.30);
+    folha.position.set(Math.cos(a) * 0.16, 0.62 + i * 0.19, Math.sin(a) * 0.16);
+    folha.rotation.set(0, -a, Math.cos(a) * 0.55);   // abre para fora
     g.add(folha);
   }
   const espiga = cilindro(0.07, 0.09, 0.36, mat(PALETA.milho, { roughness: 0.7 }), 10);
@@ -419,9 +425,17 @@ function arvore(x, z, escala = 1) {
   mundo.add(g);
   return g;
 }
-for (const [x, z, s] of [[-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15], [12, 4, 0.95], [6, -9, 1.0], [-4, -11, 1.05], [-13, -8, 0.85]]) {
-  arvore(x, z, s);
-}
+const ARVORES = [
+  [-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15], [12, 4, 0.95],
+  [6, -9, 1.0], [-4, -11, 1.05], [-13, -8, 0.85],
+  // bosque do mapa ampliado
+  [-19, 2, 1.2], [-22, -6, 1.0], [-17, 9, 0.95], [-24, 8, 1.1],
+  [18, -8, 1.15], [21, 1, 1.0], [17, 8, 0.9], [23, -13, 1.05],
+  [-8, 14, 1.0], [4, 15, 1.1], [13, 13, 0.95], [-15, 15, 0.9],
+  [-20, -14, 1.0], [9, -17, 1.1], [-6, -19, 0.95], [15, -20, 1.05],
+  [24, 10, 1.0], [-25, -1, 0.9],
+];
+for (const [x, z, s] of ARVORES) arvore(x, z, s);
 
 // ── Lago ──────────────────────────────────────────────────────
 {
@@ -458,9 +472,11 @@ function cerca(x, z, rotY, comp = 3) {
   g.rotation.y = rotY;
   mundo.add(g);
 }
-for (let i = -2; i <= 2; i++) cerca(i * 3, 8.6, 0);
-for (let i = -1; i <= 2; i++) cerca(-7.6, i * 3 + 1, Math.PI / 2);
-for (let i = -1; i <= 2; i++) cerca(7.6, i * 3 + 1, Math.PI / 2);
+// cerca acompanhando os limites do mapa ampliado
+for (let i = -9; i <= 9; i++) cerca(i * 3, 19.5, 0);        // sul
+for (let i = -9; i <= 9; i++) cerca(i * 3, -27.5, 0);       // norte
+for (let i = -9; i <= 6; i++) cerca(-27.5, i * 3, Math.PI / 2);  // oeste
+for (let i = -9; i <= 6; i++) cerca(27.5, i * 3, Math.PI / 2);   // leste
 
 // ══════════════════════════════════════════════════════════════
 //  Canteiros 3×3
@@ -558,7 +574,7 @@ const obstaculos = [];
 const addObstaculo = (x, z, r) => obstaculos.push({ x, z, r });
 
 // cercado: limites externos da área jogável
-const LIMITE = { minX: -13.5, maxX: 13.5, minZ: -13.5, maxZ: 8.2 };
+const LIMITE = { minX: -27, maxX: 27, minZ: -27, maxZ: 19 };
 
 /** Ajusta um deslocamento para não entrar em nenhum obstáculo. */
 function resolverColisao(px, pz, nx, nz, raioCorpo) {
@@ -1276,7 +1292,219 @@ for (const a of ANIMAIS) {
   g.rotation.y = Math.PI + (Math.random() - 0.5) * 0.6;
   g.userData = { tipo: 'animal', animal: a.tipo };
   mundo.add(g);
-  animaisMesh.push({ grupo: g, corpo, tipo: a.tipo, fase: Math.random() * 6 });
+  animaisMesh.push({
+    grupo: g, corpo, tipo: a.tipo, fase: Math.random() * 6,
+    // estado da IA: pastando (parado), andando, ou indo comer
+    estado: 'pastando',
+    espera: 1 + Math.random() * 3,
+    destino: null,
+    velocidade: a.tipo === 'galinha' ? 1.5 : a.tipo === 'porco' ? 1.1 : 0.95,
+    raio: a.tipo === 'galinha' ? 0.30 : a.tipo === 'vaca' ? 0.55 : 0.42,
+    casa: new THREE.Vector3(...a.pos),   // fica pelas redondezas de onde nasceu
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  IA dos animais
+// ══════════════════════════════════════════════════════════════
+// Cada bicho alterna entre pastar parado e caminhar até um ponto perto
+// de casa. Com o cocho cheio, todos largam a rotina e vão comer — é o
+// que dá a sensação de que reagiram ao que a criança fez.
+const RAIO_PASSEIO = 7.5;
+
+function pontoPertoDeCasa(casa) {
+  const a = Math.random() * Math.PI * 2;
+  const r = 1.5 + Math.random() * RAIO_PASSEIO;
+  return new THREE.Vector3(
+    Math.max(LIMITE.minX + 1, Math.min(LIMITE.maxX - 1, casa.x + Math.cos(a) * r)),
+    0,
+    Math.max(LIMITE.minZ + 1, Math.min(LIMITE.maxZ - 1, casa.z + Math.sin(a) * r))
+  );
+}
+
+function moverBicho(b, alvo, dt) {
+  const dir = new THREE.Vector3().subVectors(alvo, b.grupo.position);
+  dir.y = 0;
+  const d = dir.length();
+  if (d < 0.35) return true;                       // chegou
+  dir.normalize();
+  const passo = dt * b.velocidade;
+  const novo = resolverColisao(
+    b.grupo.position.x, b.grupo.position.z,
+    b.grupo.position.x + dir.x * passo,
+    b.grupo.position.z + dir.z * passo,
+    b.raio
+  );
+  const avancou = Math.hypot(novo.x - b.grupo.position.x, novo.z - b.grupo.position.z);
+  b.grupo.position.x = novo.x;
+  b.grupo.position.z = novo.z;
+
+  let da = Math.atan2(dir.x, dir.z) - b.grupo.rotation.y;
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  b.grupo.rotation.y += da * Math.min(1, dt * 4);
+
+  // esbarrou em algo: desiste deste destino em vez de empurrar a parede
+  return avancou < passo * 0.2;
+}
+
+function atualizarIA(dt, t) {
+  const cochoCheio = cochoRacao && cochoRacao.visible;
+  for (const b of animaisMesh) {
+    if (cochoCheio && b.estado !== 'comendo') {
+      b.estado = 'indoComer';
+      // cada um para num ponto diferente em volta do cocho, sem empilhar
+      const a = (animaisMesh.indexOf(b) / animaisMesh.length) * Math.PI * 2;
+      b.destino = new THREE.Vector3(
+        COCHO_POS.x + Math.cos(a) * 1.5, 0, COCHO_POS.z + Math.sin(a) * 1.5
+      );
+    }
+
+    switch (b.estado) {
+      case 'pastando':
+        b.espera -= dt;
+        if (b.espera <= 0) {
+          b.estado = 'andando';
+          b.destino = pontoPertoDeCasa(b.casa);
+        }
+        // mastiga: abaixa e levanta a cabeça
+        b.corpo.rotation.x = Math.sin(t * 2.2 + b.fase) * 0.05;
+        break;
+
+      case 'andando': {
+        const acabou = moverBicho(b, b.destino, dt);
+        // bamboleio de caminhada
+        b.corpo.position.y = Math.abs(Math.sin(t * 7 + b.fase)) * 0.05;
+        b.corpo.rotation.z = Math.sin(t * 7 + b.fase) * 0.04;
+        if (acabou) {
+          b.estado = 'pastando';
+          b.espera = 2 + Math.random() * 5;
+          b.corpo.position.y = 0;
+          b.corpo.rotation.z = 0;
+        }
+        break;
+      }
+
+      case 'indoComer': {
+        const chegou = moverBicho(b, b.destino, dt);
+        b.corpo.position.y = Math.abs(Math.sin(t * 8 + b.fase)) * 0.06;
+        if (chegou) {
+          b.estado = 'comendo';
+          b.tempoComendo = 6 + Math.random() * 4;
+          b.grupo.lookAt(COCHO_POS.x, 0, COCHO_POS.z);
+        }
+        break;
+      }
+
+      case 'comendo':
+        b.tempoComendo -= dt;
+        b.corpo.rotation.x = 0.22 + Math.sin(t * 8 + b.fase) * 0.1;  // cabeça no cocho
+        if (b.tempoComendo <= 0 || !cochoCheio) {
+          b.estado = 'pastando';
+          b.espera = 1 + Math.random() * 3;
+          b.corpo.rotation.x = 0;
+        }
+        break;
+    }
+  }
+}
+
+// ── Cocho de comida ───────────────────────────────────────────
+// Encher o cocho é o que faz os bichos largarem o passeio e virem comer.
+const COCHO_POS = new THREE.Vector3(-2.2, 0, 9.5);
+let cochoRacao = null;
+{
+  const g = new THREE.Group();
+  const m = mat(PALETA.madeira, { roughness: 0.9 });
+  const fundo = caixa(2.0, 0.12, 0.8, m);
+  fundo.position.y = 0.34;
+  g.add(fundo);
+  for (const lado of [-1, 1]) {
+    const parede = caixa(2.0, 0.34, 0.1, m);
+    parede.position.set(0, 0.5, lado * 0.35);
+    parede.rotation.x = lado * 0.22;
+    g.add(parede);
+    const pe = caixa(0.16, 0.4, 0.7, mat(PALETA.madeiraEsc, { roughness: 0.9 }));
+    pe.position.set(lado * 0.85, 0.2, 0);
+    g.add(pe);
+  }
+  // ração: só aparece quando o cocho está cheio
+  cochoRacao = new THREE.Group();
+  for (let i = 0; i < 18; i++) {
+    const gr = esfera(0.055 + Math.random() * 0.03, mat(0xe0b64a, { roughness: 0.9 }), 0.8);
+    gr.position.set((Math.random() - 0.5) * 1.7, 0.44 + Math.random() * 0.05, (Math.random() - 0.5) * 0.55);
+    cochoRacao.add(gr);
+  }
+  cochoRacao.visible = false;
+  g.add(cochoRacao);
+
+  g.position.copy(COCHO_POS);
+  g.userData = { tipo: 'cocho' };
+  mundo.add(g);
+}
+addObstaculo(COCHO_POS.x, COCHO_POS.z, 1.0);
+
+// ── Ovos no chão ──────────────────────────────────────────────
+// Quando a galinha bota, o ovo aparece de verdade no lugar dela.
+const ovosNoChao = [];
+function porOvoNoChao(x, z) {
+  const g = new THREE.Group();
+  const ovo = esfera(0.13, mat(0xfff6e3, { roughness: 0.45 }), 1.3);
+  ovo.position.y = 0.14;
+  ovo.rotation.z = 0.3;
+  g.add(ovo);
+  // brilho para a criança achar o ovo de longe
+  const marca = new THREE.Mesh(
+    new THREE.RingGeometry(0.24, 0.32, 20),
+    new THREE.MeshBasicMaterial({ color: 0xffe45c, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+  );
+  marca.rotation.x = -Math.PI / 2;
+  marca.position.y = 0.02;
+  g.add(marca);
+  g.position.set(x, 0, z);
+  g.userData = { tipo: 'ovo' };
+  mundo.add(g);
+  ovosNoChao.push({ node: g, marca, nascido: performance.now() });
+  return g;
+}
+
+// ── Marcador da missão ────────────────────────────────────────
+// Seta flutuante sobre o objetivo atual: num mapa grande, sem isso a
+// criança não sabe para onde ir.
+const marcadorMissao = new THREE.Group();
+{
+  const seta = new THREE.Mesh(
+    new THREE.ConeGeometry(0.34, 0.7, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffd21e })
+  );
+  seta.rotation.x = Math.PI;      // ponta para baixo
+  marcadorMissao.add(seta);
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(0.3, 0.42, 20),
+    new THREE.MeshBasicMaterial({ color: 0xffd21e, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = -1.6;
+  marcadorMissao.add(halo);
+  marcadorMissao.visible = false;
+  mundo.add(marcadorMissao);
+}
+
+/** Onde fica o objetivo da missão atual, ou null se não houver ponto fixo. */
+function alvoDaMissao() {
+  const m = MISSOES[estado.missao];
+  if (!m) return null;
+  switch (m.onde) {
+    case 'canteiros': return new THREE.Vector3(0, 0, -1);
+    case 'cocho':     return COCHO_POS;
+    case 'animais': {
+      const b = animaisMesh[0];
+      return b ? b.grupo.position : null;
+    }
+    case 'ovo':       return ovosNoChao.length ? ovosNoChao[0].node.position : null;
+    case 'camisa':    return camisaMesh ? camisaMesh.position : null;
+    default: return null;
+  }
 }
 
 // ── Camisa escondida ──────────────────────────────────────────
@@ -1442,16 +1670,37 @@ function carinho(tipo) {
   avancar('carinho');
 }
 
-function pegarOvo() {
+function pegarOvo(nodeOvo) {
   const g = estado.animais.find(x => x.tipo === 'galinha');
   if (!g || g.ovos <= 0) return false;
   g.ovos--;
   estado.cesta++;
   estado.estrelas++;
+  if (nodeOvo) {
+    const i = ovosNoChao.findIndex(o => o.node === nodeOvo);
+    if (i >= 0) { mundo.remove(ovosNoChao[i].node); ovosNoChao.splice(i, 1); }
+  }
   salvar(); atualizarHUD();
   falar('Ovinho! 🥚');
   avancar('pegouOvo');
   return true;
+}
+
+// ── Alimentar os bichos ───────────────────────────────────────
+function encherCocho() {
+  if (cochoRacao.visible) { falar('O cocho já está cheinho! 🌾'); return; }
+  cochoRacao.visible = true;
+  estado.vezesAlimentou = (estado.vezesAlimentou || 0) + 1;
+  estado.estrelas += 2;
+  salvar(); atualizarHUD();
+  falar('Comidinha no cocho! Os bichinhos vêm comer 🌾');
+  avancar('alimentou');
+  // a ração acaba depois de um tempo
+  clearTimeout(encherCocho._t);
+  encherCocho._t = setTimeout(() => {
+    cochoRacao.visible = false;
+    falar('A comidinha acabou! 🍽️');
+  }, 26000);
 }
 
 function acharCamisa() {
@@ -1525,12 +1774,10 @@ function aoTocar(cx, cy) {
     while (o && o !== mundo) {
       const d = o.userData || {};
       if (d.tipo === 'canteiro') { tocarCanteiro(d.id); return; }
-      if (d.tipo === 'animal') {
-        if (d.animal === 'galinha' && estado.animais.find(a => a.tipo === 'galinha').ovos > 0) pegarOvo();
-        else carinho(d.animal);
-        return;
-      }
+      if (d.tipo === 'animal') { carinho(d.animal); return; }
       if (d.tipo === 'camisa') { acharCamisa(); return; }
+      if (d.tipo === 'cocho') { encherCocho(); return; }
+      if (d.tipo === 'ovo') { pegarOvo(o); return; }
       o = o.parent;
     }
   }
@@ -1649,6 +1896,16 @@ function tick() {
   // pás do moinho girando
   if (pasMoinho) pasMoinho.rotation.z += dt * 0.55;
 
+  // marcador da missão pairando sobre o objetivo
+  const alvoM = alvoDaMissao();
+  if (alvoM) {
+    marcadorMissao.visible = true;
+    marcadorMissao.position.set(alvoM.x, 2.5 + Math.sin(t * 2.2) * 0.22, alvoM.z);
+    marcadorMissao.rotation.y = t * 1.1;
+  } else {
+    marcadorMissao.visible = false;
+  }
+
   // nuvens andando devagar, reaparecendo do outro lado
   for (const n of nuvens) {
     n.grupo.position.x += n.vx * dt;
@@ -1661,15 +1918,57 @@ function tick() {
     a.corpo.rotation.z = Math.sin(t * 1.1 + a.fase) * 0.03;
   }
 
-  // ovos da galinha
+  // IA dos bichos: passeiam sozinhos e vêm ao cocho quando tem comida
+  atualizarIA(dt, t);
+
+  // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
+  // ser recolhido — em vez de virar só um número no HUD.
   const gal = estado.animais.find(a => a.tipo === 'galinha');
   if (gal) {
-    if (!gal.proximoOvo) gal.proximoOvo = Date.now() + 120000;
-    else if (Date.now() >= gal.proximoOvo && gal.ovos < 3) {
+    if (!gal.proximoOvo) gal.proximoOvo = Date.now() + 45000;
+    else if (Date.now() >= gal.proximoOvo && gal.ovos < 4) {
       gal.ovos++;
-      gal.proximoOvo = Date.now() + 120000;
+      gal.proximoOvo = Date.now() + 45000;
+      const galMesh = animaisMesh.find(b => b.tipo === 'galinha');
+      const p = galMesh ? galMesh.grupo.position : new THREE.Vector3();
+      porOvoNoChao(p.x + (Math.random() - 0.5) * 0.6, p.z - 0.5);
       falar('A galinha botou um ovinho! 🥚');
       salvar();
+    }
+  }
+  // pulsa o anel do ovo para chamar atenção
+  for (const o of ovosNoChao) {
+    const k = 1 + Math.sin(t * 4) * 0.15;
+    o.marca.scale.set(k, k, 1);
+    o.node.children[0].position.y = 0.14 + Math.sin(t * 3) * 0.02;
+  }
+
+  // Cachorro como pet: quando não está sendo controlado, segue quem
+  // está, mantendo distância para não empurrar nem colar.
+  if (atorAtivo !== 1) {
+    const alvoPet = ATORES[atorAtivo].node.position;
+    const d = Math.hypot(dalmata.position.x - alvoPet.x, dalmata.position.z - alvoPet.z);
+    if (d > 2.2) {
+      const dir = new THREE.Vector3(alvoPet.x - dalmata.position.x, 0, alvoPet.z - dalmata.position.z).normalize();
+      const passo = dt * Math.min(4.2, 1.6 + d * 0.45);   // corre mais se ficou longe
+      const novo = resolverColisao(
+        dalmata.position.x, dalmata.position.z,
+        dalmata.position.x + dir.x * passo, dalmata.position.z + dir.z * passo, 0.30
+      );
+      dalmata.position.x = novo.x;
+      dalmata.position.z = novo.z;
+      let da = Math.atan2(dir.x, dir.z) - dalmata.rotation.y;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      dalmata.rotation.y += da * Math.min(1, dt * 6);
+      dalmata.position.y = Math.abs(Math.sin(t * 13)) * 0.07;
+    } else {
+      dalmata.position.y += (0 - dalmata.position.y) * Math.min(1, dt * 8);
+      // olha para o dono quando alcança
+      let da = Math.atan2(alvoPet.x - dalmata.position.x, alvoPet.z - dalmata.position.z) - dalmata.rotation.y;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      dalmata.rotation.y += da * Math.min(1, dt * 3);
     }
   }
 
@@ -1732,6 +2031,7 @@ addEventListener('resize', () => {
 window.__jogo = {
   cena, mundo, animaisMesh, manu, estado, THREE,
   ATORES, obstaculos, resolver: resolverColisao,
+  camera, renderer, tick,
   get atorAtivo() { return atorAtivo; },
 };
 
