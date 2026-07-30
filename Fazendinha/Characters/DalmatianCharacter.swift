@@ -8,7 +8,8 @@ final class DalmatianCharacter: SCNNode {
     override init() {
         let body = Geo.capsule(radius: 0.12, height: 0.3, .dogWhite)
         body.position = SCNVector3(0, 0.2, 0)
-        for (x, y, z): [(CGFloat, CGFloat, CGFloat)] in [(0.1, 0.2, 0.1), (-0.08, 0.25, 0.0), (0.05, 0.15, -0.1)] {
+        let spots: [(CGFloat, CGFloat, CGFloat)] = [(0.1, 0.2, 0.1), (-0.08, 0.25, 0.0), (0.05, 0.15, -0.1)]
+        for (x, y, z) in spots {
             let s = Geo.sphere(0.03, .dogSpot)
             s.position = SCNVector3(x, y, z)
             body.addChildNode(s)

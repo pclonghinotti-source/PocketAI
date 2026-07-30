@@ -87,7 +87,7 @@ final class FarmGameScene: SCNScene, SCNSceneRendererDelegate {
                 manu.idlePose()
                 dog.position = SCNVector3(moveEnd.x + 0.5, 0, moveEnd.z - 0.5)
             } else {
-                let t = walkProgress
+                let t = Float(walkProgress)
                 let x = moveStart.x + (moveEnd.x - moveStart.x) * t
                 let z = moveStart.z + (moveEnd.z - moveStart.z) * t
                 manu.position = SCNVector3(x, 0, z)
