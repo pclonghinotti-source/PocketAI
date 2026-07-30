@@ -43,13 +43,13 @@ final class NenaoCharacter: SCNNode {
 
         let arm = Geo.capsule(radius: 0.05, height: 0.25, .bearBrown)
         arm.position = SCNVector3(-0.3, 0.35, 0)
-        addChildNode(arm)
         let arm2 = arm.clone()
         arm2.position = SCNVector3(0.3, 0.35, 0)
         rightArm = arm2
-        addChildNode(arm2)
 
         super.init()
+        addChildNode(arm)
+        addChildNode(arm2)
         addChildNode(body)
         addChildNode(head)
         for x in [-0.1 as CGFloat, 0.1 as CGFloat] {
