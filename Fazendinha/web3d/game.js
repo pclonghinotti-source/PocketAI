@@ -1811,20 +1811,52 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = () => { vozEscolhida = escolherVoz(); };
 }
 
-function falar(txt, ms = 2600) {
+/** Escolhe a voz masculina disponível, para o Nenão soar diferente. */
+function escolherVozGrave() {
+  const vozes = speechSynthesis.getVoices();
+  const pt = vozes.filter(v => /^pt/i.test(v.lang));
+  if (!pt.length) return null;
+  const masc = pt.find(v => /daniel|ricardo|felipe|male|antonio|joão|joao/i.test(v.name));
+  return masc || pt[0];
+}
+let vozGrave = null;
+
+// Timbre de cada personagem. O Windows tem só duas vozes em pt-BR, então
+// a diferença real vem de tom e ritmo: o urso fala grave e devagar, o
+// cachorro agudo e rápido, a Manu no meio, aguda de criança.
+const TIMBRES = {
+  manu:    { pitch: 1.8,  rate: 1.05, grave: false },
+  nenao:   { pitch: 0.55, rate: 0.85, grave: true  },
+  cachorro:{ pitch: 2.0,  rate: 1.25, grave: false },
+  narrador:{ pitch: 1.5,  rate: 1.02, grave: false },
+};
+
+/**
+ * `quem` escolhe o timbre. Falas de bichos e de missão usam o narrador,
+ * que é a própria Manu contando o que aconteceu.
+ */
+function falar(txt, ms = 2600, quem = null) {
   balao.textContent = txt;
   balao.style.display = 'block';
   clearTimeout(falar._t);
   falar._t = setTimeout(() => (balao.style.display = 'none'), ms);
-  if (vozAtiva && window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance(txt.replace(/[^\p{L}\p{N}\s,!?.]/gu, ''));
-    if (!vozEscolhida) vozEscolhida = escolherVoz();
-    if (vozEscolhida) u.voice = vozEscolhida;
-    u.lang = 'pt-BR';
-    u.rate = 1.02;    // um tiquinho mais rápido, como criança falando
-    u.pitch = 1.75;   // agudo, mas antes do ponto em que fica robótico
-    speechSynthesis.speak(u);
-  }
+  if (!vozAtiva || !window.speechSynthesis) return;
+
+  // sem `quem`, herda de quem está sendo controlado
+  const porAtor = ['manu', 'cachorro', 'nenao'];
+  const chave = quem || porAtor[atorAtivo] || 'narrador';
+  const timbre = TIMBRES[chave] || TIMBRES.narrador;
+
+  const u = new SpeechSynthesisUtterance(txt.replace(/[^\p{L}\p{N}\s,!?.]/gu, ''));
+  if (!vozEscolhida) vozEscolhida = escolherVoz();
+  if (timbre.grave && !vozGrave) vozGrave = escolherVozGrave();
+  const voz = timbre.grave ? (vozGrave || vozEscolhida) : vozEscolhida;
+  if (voz) u.voice = voz;
+  u.lang = 'pt-BR';
+  u.rate = timbre.rate;
+  u.pitch = timbre.pitch;
+  speechSynthesis.cancel();   // não empilha falas por cima da anterior
+  speechSynthesis.speak(u);
 }
 
 function atualizarHUD() {
@@ -1851,8 +1883,10 @@ function trocarAtor(i) {
   for (const b of document.querySelectorAll('#elenco button')) {
     b.classList.toggle('ativo', +b.dataset.i === i);
   }
+  // quem assume se apresenta com a própria voz
   const a = ATORES[i];
-  falar(`Agora você controla ${a.nome}! ${a.emoji}`, 2200);
+  const saudacao = ['Oi! Sou a Manu! 👧', 'Au au! Vamos brincar! 🐶', 'Grrr… Oi, sou o Nenão! 🐻'][i];
+  falar(saudacao, 2400, ['manu', 'cachorro', 'nenao'][i]);
 }
 for (const btn of document.querySelectorAll('#elenco button')) {
   btn.addEventListener('click', () => trocarAtor(+btn.dataset.i));
@@ -1944,8 +1978,10 @@ function carinho(tipo) {
   estado.carinhosFeitos++;
   const info = ANIMAIS.find(x => x.tipo === tipo);
   const falas = { galinha: 'Có có có! 🐔', vaca: 'Muuuu! 🐄', ovelha: 'Béééé! 🐑', porco: 'Oinc oinc! 🐖' };
+  // cada bicho no seu tom: a vaca grave, a galinha esganiçada
+  const tomBicho = { galinha: 'cachorro', vaca: 'nenao', ovelha: 'manu', porco: 'nenao' };
   salvar(); atualizarHUD();
-  falar(`${info.nome}: ${falas[tipo]}`);
+  falar(`${info.nome}: ${falas[tipo]}`, 2600, tomBicho[tipo]);
   avancar('carinho');
 }
 
