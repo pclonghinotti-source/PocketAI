@@ -110,14 +110,22 @@ cena.add(sol);
 const mat = (cor, extra = {}) =>
   new THREE.MeshStandardMaterial({ color: cor, roughness: 0.72, metalness: 0.0, ...extra });
 
-/** Sólido de revolução: dá volume orgânico onde uma esfera ficaria "de bloco". */
+/**
+ * Sólido de revolução: dá volume orgânico onde uma esfera ficaria "de bloco".
+ * LatheGeometry é uma casca de face única — sem DoubleSide a peça fica
+ * "transparente" de certos ângulos e dá para ver o que está dentro dela.
+ */
 function torneado(perfil, material, segmentos = 20) {
   const pontos = perfil.map(([x, y]) => new THREE.Vector2(x, y));
   const g = new THREE.LatheGeometry(pontos, segmentos);
-  const m = new THREE.Mesh(g, material);
-  m.castShadow = true;
-  m.receiveShadow = true;
-  return m;
+  g.computeVertexNormals();
+  const m = material.clone();
+  m.side = THREE.DoubleSide;
+  m.shadowSide = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(g, m);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 function esfera(r, material, achatamento = 1) {
@@ -181,19 +189,25 @@ for (const [x, z, r] of [[-22, -20, 9], [16, -24, 11], [30, -8, 8], [-30, -4, 7]
   corpo.position.y = 1.15;
   celeiro.add(corpo);
 
-  // Telhado de duas águas via prisma extrudado
+  // Telhado de duas águas via prisma extrudado.
+  // Corpo: X de -1.7 a 1.7, Z de -1.3 a 1.3, topo em y=2.3.
+  // Com rotation.y=90°, a largura da forma cai no eixo Z e a extrusão
+  // cresce em +X a partir de position.x — daí o offset de -metade.
+  const ABA_Z = 1.52;   // meia-largura: 0.22 de beiral sobre Z
+  const VAO_X = 3.84;   // vão extrudado: 0.22 de beiral sobre X
   const forma = new THREE.Shape();
-  forma.moveTo(-1.95, 0);
-  forma.lineTo(0, 1.35);
-  forma.lineTo(1.95, 0);
-  forma.lineTo(-1.95, 0);
+  forma.moveTo(-ABA_Z, 0);
+  forma.lineTo(0, 1.3);
+  forma.lineTo(ABA_Z, 0);
+  forma.lineTo(-ABA_Z, 0);
   const telhado = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(forma, { depth: 2.9, bevelEnabled: false }),
+    new THREE.ExtrudeGeometry(forma, { depth: VAO_X, bevelEnabled: false }),
     mat(PALETA.telhado)
   );
   telhado.rotation.y = Math.PI / 2;
-  telhado.position.set(1.45, 2.3, 0);
+  telhado.position.set(-VAO_X / 2, 2.3, 0);
   telhado.castShadow = true;
+  telhado.receiveShadow = true;
   celeiro.add(telhado);
 
   const porta = caixa(1.1, 1.5, 0.08, mat(PALETA.madeira));
@@ -459,24 +473,34 @@ function criarManu() {
   cabeca.position.y = 1.115;
   g.add(cabeca);
 
-  // ── Cabelo cacheado: calota + cachos em volta ──
+  // ── Cabelo cacheado ──
+  // O crânio tem raio 0.175 e escala Y 1.08, logo o topo fica em ~0.189.
+  // A calota precisa passar disso, senão sobra pele à mostra no alto.
   const calota = torneado([
-    [0.0, 0.0], [0.186, 0.008], [0.192, 0.075], [0.170, 0.145], [0.105, 0.19], [0.0, 0.20],
-  ], matCabelo, 26);
-  calota.position.y = 1.10;
+    [0.0, 0.212], [0.075, 0.205], [0.135, 0.180], [0.180, 0.120],
+    [0.196, 0.045], [0.198, -0.030], [0.190, -0.090],
+  ], matCabelo, 28);
+  calota.position.set(0, 0, 0);
   cabeca.add(calota);
-  calota.position.set(0, -0.015, 0);
 
-  // cachos: esferas ao redor do crânio dão volume de cabelo crespo
+  // cachos numa meia-esfera (inclui o topo) para dar volume crespo
   const cachos = [];
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2;
-    const raio = 0.175 + Math.sin(i * 2.7) * 0.012;
-    const alt = 0.055 + Math.cos(i * 1.9) * 0.075;
-    const c = esfera(0.052 + (i % 3) * 0.008, matCabelo, 0.95);
-    c.position.set(Math.cos(a) * raio, alt, Math.sin(a) * raio * 0.94);
-    // afina na frente para não cobrir o rosto
-    if (c.position.z > 0.08 && Math.abs(c.position.x) < 0.10) c.position.y += 0.075;
+  const N = 54;
+  for (let i = 0; i < N; i++) {
+    // espiral de Fibonacci só no hemisfério superior
+    const k = (i + 0.5) / N;
+    const phi = Math.acos(1 - k);            // 0 = topo
+    const theta = i * 2.399963;              // ângulo de ouro
+    const r = 0.196;
+    const x = Math.sin(phi) * Math.cos(theta) * r;
+    const z = Math.sin(phi) * Math.sin(theta) * r * 0.96;
+    const y = Math.cos(phi) * r * 1.06;
+
+    // abre espaço para o rosto: pula cachos baixos e muito à frente
+    if (z > 0.10 && y < 0.06) continue;
+
+    const c = esfera(0.050 + (i % 4) * 0.007, matCabelo, 0.95);
+    c.position.set(x, y, z);
     cabeca.add(c);
     cachos.push(c);
   }
