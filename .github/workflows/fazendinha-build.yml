@@ -6,6 +6,13 @@ name: Fazendinha Build (unsigned IPA)
 # assina na instalação no tablet — mesmo fluxo do workflow "iOS Build".
 on:
   workflow_dispatch:
+  # Enquanto o build não estabiliza, roda a cada push que toque no jogo —
+  # o alvo é leve (sem FFmpeg/CoreML), o build inteiro leva menos de 1 min.
+  push:
+    paths:
+      - 'Fazendinha/**'
+      - 'project.yml'
+      - '.github/workflows/fazendinha-build.yml'
 
 jobs:
   build:
