@@ -173,16 +173,25 @@ function cilindro(rt, rb, alt, material, seg = 16) {
 const mundo = new THREE.Group();
 cena.add(mundo);
 
-// Chão com relevo suave (não um plano chapado)
+// Chão com relevo suave (não um plano chapado).
+// A mesma fórmula é usada para apoiar os pés dos personagens; sem isso
+// eles andam em y=0 e afundam onde o terreno sobe.
+const RAIO_PLANO = 11;   // centro plano, onde ficam canteiros e construções
+function alturaTerreno(x, z) {
+  const d = Math.hypot(x, z);
+  if (d <= RAIO_PLANO) return 0;
+  const ondula = Math.sin(x * 0.16) * Math.cos(z * 0.14) * 0.9;
+  // limita o quanto a borda sobe, senão vira montanha intransponível
+  const fator = Math.min((d - RAIO_PLANO) / 9, 1.6);
+  return ondula * fator;
+}
 {
-  const g = new THREE.PlaneGeometry(80, 80, 48, 48);
+  const g = new THREE.PlaneGeometry(80, 80, 96, 96);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
+    // o plano é girado -90° em X, então o y local vira -z do mundo
     const x = pos.getX(i), y = pos.getY(i);
-    const d = Math.hypot(x, y);
-    // mantém o centro plano (área jogável) e ondula as bordas
-    const ondula = Math.sin(x * 0.16) * Math.cos(y * 0.14) * 0.9;
-    pos.setZ(i, d > 11 ? ondula * ((d - 11) / 9) : 0);
+    pos.setZ(i, alturaTerreno(x, -y));
   }
   g.computeVertexNormals();
   const chao = new THREE.Mesh(g, mat(PALETA.grama, { roughness: 0.95 }));
@@ -192,7 +201,8 @@ cena.add(mundo);
 }
 
 // Colinas em camadas: as de trás mais claras, dando a leitura de
-// profundidade em faixas que a referência usa.
+// profundidade em faixas que a referência usa. São decorativas — viram
+// obstáculo mais abaixo, senão dá para entrar dentro delas.
 const COLINAS = [
   [-24, -26, 12, PALETA.gramaClara, 0.38],
   [14, -30, 15, PALETA.gramaClara, 0.34],
@@ -703,30 +713,39 @@ function criarManu() {
   g.add(cabeca);
 
   // ── Cabelo cacheado ──
-  // O crânio tem raio 0.175 e escala Y 1.08, logo o topo fica em ~0.189.
-  // A calota precisa passar disso, senão sobra pele à mostra no alto.
+  // Duas restrições brigam aqui: cobrir o topo do crânio (raio 0.175 com
+  // escala Y 1.08, topo em ~0.189) sem fechar o rosto. A calota por isso
+  // para na altura da testa, e a nuca é uma peça separada atrás.
+  const ALTURA_TESTA = 0.075;
+
   const calota = torneado([
-    [0.0, 0.212], [0.075, 0.205], [0.135, 0.180], [0.180, 0.120],
-    [0.196, 0.045], [0.198, -0.030], [0.190, -0.090],
+    [0.0, 0.212], [0.075, 0.206], [0.135, 0.182], [0.178, 0.130],
+    [0.196, ALTURA_TESTA],
   ], matCabelo, 28);
-  calota.position.set(0, 0, 0);
   cabeca.add(calota);
 
-  // cachos numa meia-esfera (inclui o topo) para dar volume crespo
+  // volume da nuca, só atrás
+  const nuca = esfera(0.185, matCabelo, 1.0);
+  nuca.scale.z = 0.72;
+  nuca.position.set(0, 0.01, -0.075);
+  cabeca.add(nuca);
+
+  // cachos por espiral de Fibonacci, pulando a janela do rosto
   const cachos = [];
-  const N = 54;
+  const N = 60;
   for (let i = 0; i < N; i++) {
-    // espiral de Fibonacci só no hemisfério superior
     const k = (i + 0.5) / N;
     const phi = Math.acos(1 - k);            // 0 = topo
     const theta = i * 2.399963;              // ângulo de ouro
-    const r = 0.196;
+    const r = 0.198;
     const x = Math.sin(phi) * Math.cos(theta) * r;
     const z = Math.sin(phi) * Math.sin(theta) * r * 0.96;
     const y = Math.cos(phi) * r * 1.06;
 
-    // abre espaço para o rosto: pula cachos baixos e muito à frente
-    if (z > 0.10 && y < 0.06) continue;
+    // janela do rosto: nada de cacho à frente abaixo da testa
+    const naFrente = z > 0.02;
+    const abaixoDaTesta = y < ALTURA_TESTA + 0.03;
+    if (naFrente && abaixoDaTesta) continue;
 
     const c = esfera(0.050 + (i % 4) * 0.007, matCabelo, 0.95);
     c.position.set(x, y, z);
@@ -893,10 +912,30 @@ function criarDalmata() {
   corpo.position.y = 0.28;
   g.add(corpo);
 
-  for (const [dx, dy, dz, r] of [[0.10, 0.34, 0.06, 0.05], [-0.09, 0.30, -0.10, 0.045], [0.05, 0.22, -0.16, 0.04]]) {
-    const m = esfera(r, mPreto, 0.6);
+  // Manchas de dálmata: precisam ser muitas e bem distribuídas, senão
+  // de longe ele lê como um cachorro branco qualquer. Cada uma é
+  // achatada contra o corpo para parecer pintada, não colada.
+  const MANCHAS = [
+    // lombo e laterais
+    [0.13, 0.36, 0.02, 0.062], [-0.12, 0.34, 0.10, 0.055], [0.09, 0.30, -0.14, 0.050],
+    [-0.14, 0.28, -0.06, 0.058], [0.15, 0.24, 0.14, 0.045], [-0.10, 0.38, -0.16, 0.042],
+    [0.02, 0.41, 0.12, 0.048], [-0.05, 0.20, 0.18, 0.040], [0.06, 0.19, -0.22, 0.044],
+    [-0.16, 0.33, 0.20, 0.038],
+  ];
+  for (const [dx, dy, dz, r] of MANCHAS) {
+    const m = esfera(r, mPreto, 0.55);
     m.position.set(dx, dy, dz);
     g.add(m);
+  }
+  // manchinha no rosto, marca registrada do dálmata
+  const olhoMancha = esfera(0.055, mPreto, 0.6);
+  olhoMancha.position.set(-0.085, 0.47, 0.255);
+  g.add(olhoMancha);
+  // manchas nas patas
+  for (const [dx, dz] of [[-0.11, 0.14], [0.11, -0.14]]) {
+    const p = esfera(0.048, mPreto, 0.7);
+    p.position.set(dx, 0.16, dz);
+    g.add(p);
   }
 
   const cabeca = esfera(0.145, mBranco, 0.95);
@@ -979,6 +1018,8 @@ for (const [x, z, s] of [[-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15],
 for (let i = 0; i < 9; i++) {
   addObstaculo(6.2 + (i % 3) * 0.95, -6.5 + Math.floor(i / 3) * 1.0, 0.28); // milharal
 }
+// as colinas são maciças: sem isso dá para caminhar para dentro delas
+for (const [x, z, r] of COLINAS) addObstaculo(x, z, r * 0.62);
 
 // ── Elenco jogável ────────────────────────────────────────────
 // Cada um anda a seu jeito: a Manu tem articulações completas, o
@@ -1001,7 +1042,7 @@ const ATORES = [
         u.pernas[1].pivo.rotation.x = s * 0.55;
         u.pernas[0].joelho.rotation.x = Math.max(0, s) * 0.7;
         u.pernas[1].joelho.rotation.x = Math.max(0, -s) * 0.7;
-        manu.position.y = Math.abs(s) * 0.045;
+        this.bobY = Math.abs(s) * 0.045;
         u.torso.rotation.z = c * 0.035;
         for (const tr of u.trancas) tr.rotation.x = s * 0.32;
       } else {
@@ -1014,7 +1055,7 @@ const ATORES = [
           p.pivo.rotation.x += (0 - p.pivo.rotation.x) * Math.min(1, dt * 5);
           p.joelho.rotation.x += (0 - p.joelho.rotation.x) * Math.min(1, dt * 5);
         }
-        manu.position.y += (0 - manu.position.y) * Math.min(1, dt * 6);
+        this.bobY += (0 - this.bobY) * Math.min(1, dt * 6);
         u.torso.scale.y = 1 + Math.sin(t * 1.7) * 0.018;
         u.torso.rotation.z += (0 - u.torso.rotation.z) * Math.min(1, dt * 5);
         for (const tr of u.trancas) tr.rotation.x = r * 0.6;
@@ -1028,10 +1069,10 @@ const ATORES = [
       // trote: saltinho curto e rápido, rabo acelera quando corre
       if (andando) {
         passoDoAtor += dt * 13;
-        dalmata.position.y = Math.abs(Math.sin(passoDoAtor)) * 0.075;
+        this.bobY = Math.abs(Math.sin(passoDoAtor)) * 0.075;
         dalmata.rotation.z = Math.sin(passoDoAtor * 0.5) * 0.05;
       } else {
-        dalmata.position.y += (0 - dalmata.position.y) * Math.min(1, dt * 8);
+        this.bobY += (0 - this.bobY) * Math.min(1, dt * 8);
         dalmata.rotation.z += (0 - dalmata.rotation.z) * Math.min(1, dt * 8);
       }
       dalmata.userData.cauda.rotation.z = Math.sin(t * (andando ? 20 : 11)) * 0.5;
@@ -1044,12 +1085,12 @@ const ATORES = [
       if (andando) {
         passoDoAtor += dt * 6.5;
         const s = Math.sin(passoDoAtor);
-        nenao.position.y = Math.abs(s) * 0.05;
+        this.bobY = Math.abs(s) * 0.05;
         nenao.rotation.z = s * 0.08;
         nenao.userData.bracos[0].rotation.x = s * 0.5;
         nenao.userData.bracos[1].rotation.x = -s * 0.5;
       } else {
-        nenao.position.y += (0 - nenao.position.y) * Math.min(1, dt * 6);
+        this.bobY += (0 - this.bobY) * Math.min(1, dt * 6);
         nenao.rotation.z += (0 - nenao.rotation.z) * Math.min(1, dt * 6);
         nenao.userData.bracos[0].rotation.x *= 0.9;
         nenao.userData.bracos[1].rotation.z = -0.3 + Math.sin(t * 3) * 0.5;
@@ -1534,6 +1575,36 @@ const balao = el('balao'), seletor = el('seletor');
 
 let canteiroAlvo = null;
 
+// ── Voz ───────────────────────────────────────────────────────
+// Sem escolher a voz, o navegador usa a padrão de pt-BR, que no Windows
+// é o "Daniel" (masculino). Preferimos uma voz feminina e subimos o tom
+// para soar como uma menina.
+const VOZES_FEMININAS = [
+  'maria', 'luciana', 'francisca', 'fernanda', 'helena', 'joana',
+  'camila', 'vitoria', 'vitória', 'female', 'mulher',
+];
+let vozEscolhida = null;
+
+function escolherVoz() {
+  const vozes = speechSynthesis.getVoices();
+  if (!vozes.length) return null;
+  const ptbr = vozes.filter(v => /^pt[-_]?BR/i.test(v.lang));
+  const pt = ptbr.length ? ptbr : vozes.filter(v => /^pt/i.test(v.lang));
+  if (!pt.length) return null;
+  // 1ª escolha: nome conhecidamente feminino
+  const fem = pt.find(v => VOZES_FEMININAS.some(n => v.name.toLowerCase().includes(n)));
+  if (fem) return fem;
+  // 2ª: qualquer uma que não seja a masculina padrão
+  const naoMasc = pt.find(v => !/daniel|ricardo|felipe|male/i.test(v.name));
+  return naoMasc || pt[0];
+}
+
+vozEscolhida = escolherVoz();
+if (window.speechSynthesis) {
+  // a lista costuma chegar vazia no primeiro acesso e preencher depois
+  speechSynthesis.onvoiceschanged = () => { vozEscolhida = escolherVoz(); };
+}
+
 function falar(txt, ms = 2600) {
   balao.textContent = txt;
   balao.style.display = 'block';
@@ -1541,9 +1612,11 @@ function falar(txt, ms = 2600) {
   falar._t = setTimeout(() => (balao.style.display = 'none'), ms);
   if (vozAtiva && window.speechSynthesis) {
     const u = new SpeechSynthesisUtterance(txt.replace(/[^\p{L}\p{N}\s,!?.]/gu, ''));
+    if (!vozEscolhida) vozEscolhida = escolherVoz();
+    if (vozEscolhida) u.voice = vozEscolhida;
     u.lang = 'pt-BR';
-    u.rate = 0.95;
-    u.pitch = 1.35;
+    u.rate = 1.02;    // um tiquinho mais rápido, como criança falando
+    u.pitch = 1.75;   // agudo, mas antes do ponto em que fica robótico
     speechSynthesis.speak(u);
   }
 }
@@ -1808,7 +1881,9 @@ for (const btn of seletor.querySelectorAll('button')) {
 // ── Toque vs arrasto ──────────────────────────────────────────
 // Um arrasto gira a câmera; só conta como toque se o dedo quase não
 // andou, senão girar a câmera mandaria a Manu andar sem querer.
-let orbita = 0;
+// ?orbita=3.14 abre com a câmera de frente — atalho para inspecionar o
+// rosto sem precisar arrastar
+let orbita = parseFloat(new URLSearchParams(location.search).get('orbita')) || 0;
 const LIMITE_TOQUE = 12; // px
 let pressionado = null;
 
@@ -1893,6 +1968,19 @@ function tick() {
     if (i !== atorAtivo) ATORES[i].animar(t, dt, false);
   }
 
+  // Apoia todo mundo no relevo. As animações escrevem só o saltinho em
+  // `bobY`; a altura final é terreno + salto, senão o personagem afunda
+  // ao sair da parte plana do mapa.
+  for (const a of ATORES) {
+    a.node.position.y = alturaTerreno(a.node.position.x, a.node.position.z) + (a.bobY || 0);
+  }
+  for (const b of animaisMesh) {
+    b.grupo.position.y = alturaTerreno(b.grupo.position.x, b.grupo.position.z);
+  }
+  for (const o of ovosNoChao) {
+    o.node.position.y = alturaTerreno(o.node.position.x, o.node.position.z);
+  }
+
   // pás do moinho girando
   if (pasMoinho) pasMoinho.rotation.z += dt * 0.55;
 
@@ -1961,9 +2049,9 @@ function tick() {
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       dalmata.rotation.y += da * Math.min(1, dt * 6);
-      dalmata.position.y = Math.abs(Math.sin(t * 13)) * 0.07;
+      ATORES[1].bobY = Math.abs(Math.sin(t * 13)) * 0.07;
     } else {
-      dalmata.position.y += (0 - dalmata.position.y) * Math.min(1, dt * 8);
+      ATORES[1].bobY = (ATORES[1].bobY || 0) * 0.85;
       // olha para o dono quando alcança
       let da = Math.atan2(alvoPet.x - dalmata.position.x, alvoPet.z - dalmata.position.z) - dalmata.rotation.y;
       while (da > Math.PI) da -= Math.PI * 2;
