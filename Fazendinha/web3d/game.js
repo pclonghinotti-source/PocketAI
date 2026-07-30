@@ -168,6 +168,81 @@ function cilindro(rt, rb, alt, material, seg = 16) {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  Texturas procedurais
+// ══════════════════════════════════════════════════════════════
+// Cor chapada deixa tudo com cara de plástico. Estas texturas são
+// pintadas em canvas na hora — sem arquivo externo — e dão ao pelo
+// variação de tom, fios e sombreado, que é o que cria a sensação de
+// volume que faltava.
+
+/** Converte 0xRRGGBB em [r,g,b]. */
+const hexRGB = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+
+/** Mistura duas cores, t=0 devolve a, t=1 devolve b. */
+function misturar(a, b, t) {
+  const A = hexRGB(a), B = hexRGB(b);
+  return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`;
+}
+
+/**
+ * Pelo: base com nuvens de tom + fios finos por cima.
+ * `claro`/`escuro` definem a amplitude da variação.
+ */
+function texturaPelo(base, escuro, claro, { fios = 900, px = 512 } = {}) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const c = cv.getContext('2d');
+
+  c.fillStyle = misturar(base, base, 0);
+  c.fillRect(0, 0, px, px);
+
+  // manchas suaves de luz e sombra, para o pelo não ficar uniforme
+  for (let i = 0; i < 70; i++) {
+    const x = Math.random() * px, y = Math.random() * px;
+    const r = px * (0.05 + Math.random() * 0.16);
+    const paraClaro = Math.random() > 0.5;
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, misturar(base, paraClaro ? claro : escuro, 0.5));
+    g.addColorStop(1, misturar(base, paraClaro ? claro : escuro, 0));
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // fios: traços curtos alternando claro e escuro
+  c.lineWidth = Math.max(1, px / 380);
+  for (let i = 0; i < fios; i++) {
+    const x = Math.random() * px, y = Math.random() * px;
+    const comp = px * (0.012 + Math.random() * 0.03);
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.1;
+    const t = 0.18 + Math.random() * 0.4;
+    c.strokeStyle = misturar(base, Math.random() > 0.45 ? escuro : claro, t);
+    c.globalAlpha = 0.4 + Math.random() * 0.35;
+    c.beginPath();
+    c.moveTo(x, y);
+    c.lineTo(x + Math.cos(ang) * comp, y + Math.sin(ang) * comp);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Material de pelo pronto, com leve rugosidade variável. */
+function matPelo(base, escuro, claro, extra = {}) {
+  return new THREE.MeshStandardMaterial({
+    map: texturaPelo(base, escuro, claro),
+    roughness: 0.92,
+    metalness: 0,
+    ...extra,
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
 //  Mundo
 // ══════════════════════════════════════════════════════════════
 const mundo = new THREE.Group();
@@ -833,84 +908,168 @@ function criarManu() {
   return g;
 }
 
-/** Nenão: urso de camisa verde. */
+/** Nenão: urso de pelúcia de camisa verde, com pelo em várias tonalidades. */
 function criarNenao() {
   const g = new THREE.Group();
-  const mUrso = mat(PALETA.urso, { roughness: 0.85 });
-  const mClaro = mat(PALETA.ursoClaro, { roughness: 0.8 });
+  const mUrso = matPelo(PALETA.urso, 0x5a3618, 0xc08a4e);
+  const mClaro = matPelo(PALETA.ursoClaro, 0x8a6438, 0xdcb98a, { roughness: 0.88 });
+  const mFocinho = mat(0xc9a173, { roughness: 0.7 });
 
+  // tronco em pera: mais largo embaixo, como urso de pelúcia
   const corpo = torneado([
-    [0.0, 0.0], [0.26, 0.03], [0.30, 0.22], [0.26, 0.44], [0.0, 0.48],
-  ], mUrso, 22);
+    [0.0, 0.0], [0.20, 0.01], [0.27, 0.08], [0.305, 0.20],
+    [0.30, 0.32], [0.26, 0.44], [0.19, 0.52], [0.0, 0.545],
+  ], mUrso, 26);
   g.add(corpo);
 
+  // barriga mais clara, como a maioria dos ursos
+  const barriga = esfera(0.21, mClaro, 1.05);
+  barriga.scale.z = 0.62;
+  barriga.position.set(0, 0.26, 0.17);
+  g.add(barriga);
+
   const camisa = torneado([
-    [0.0, 0.0], [0.31, 0.01], [0.315, 0.16], [0.28, 0.26], [0.0, 0.27],
-  ], mat(PALETA.camisa, { roughness: 0.75 }), 22);
-  camisa.position.y = 0.16;
+    [0.0, 0.0], [0.315, 0.005], [0.325, 0.10], [0.315, 0.20], [0.28, 0.27], [0.0, 0.285],
+  ], mat(PALETA.camisa, { roughness: 0.72 }), 26);
+  camisa.position.y = 0.155;
   g.add(camisa);
-
-  const cabeca = esfera(0.24, mUrso, 0.95);
-  cabeca.position.y = 0.70;
-  g.add(cabeca);
-
-  const focinho = esfera(0.115, mClaro, 0.8);
-  focinho.position.set(0, 0.66, 0.20);
-  g.add(focinho);
-  const nariz = esfera(0.045, mat(0x2b2b2b, { roughness: 0.4 }), 0.7);
-  nariz.position.set(0, 0.69, 0.30);
-  g.add(nariz);
-
-  for (const lado of [-1, 1]) {
-    const orelha = esfera(0.085, mUrso, 0.9);
-    orelha.position.set(lado * 0.17, 0.88, -0.01);
-    g.add(orelha);
-    const dentro = esfera(0.045, mClaro, 0.8);
-    dentro.position.set(lado * 0.18, 0.885, 0.045);
-    g.add(dentro);
-    const olho = esfera(0.032, mat(0x1a1a1a, { roughness: 0.3 }), 1.1);
-    olho.position.set(lado * 0.085, 0.745, 0.205);
-    g.add(olho);
+  // gola e barra em tom mais escuro dão acabamento de roupa
+  for (const [y, r] of [[0.44, 0.20], [0.155, 0.317]]) {
+    const faixa = new THREE.Mesh(new THREE.TorusGeometry(r, 0.016, 8, 26), mat(0x2c9c52, { roughness: 0.7 }));
+    faixa.rotation.x = Math.PI / 2;
+    faixa.position.y = y;
+    faixa.castShadow = true;
+    g.add(faixa);
   }
 
+  // ── Cabeça ──
+  const cabeca = new THREE.Group();
+  const cranio = esfera(0.235, mUrso, 0.96);
+  cabeca.add(cranio);
+  // bochechas
+  for (const lado of [-1, 1]) {
+    const bo = esfera(0.105, mUrso, 0.9);
+    bo.position.set(lado * 0.135, -0.045, 0.075);
+    cabeca.add(bo);
+  }
+  // focinho saliente, com ponte até a testa
+  const focinho = esfera(0.125, mFocinho, 0.82);
+  focinho.scale.z = 1.25;
+  focinho.position.set(0, -0.045, 0.185);
+  cabeca.add(focinho);
+  const ponte = esfera(0.075, mFocinho, 0.7);
+  ponte.scale.z = 1.5;
+  ponte.position.set(0, 0.02, 0.15);
+  cabeca.add(ponte);
+
+  const nariz = esfera(0.052, mat(0x2b2b2b, { roughness: 0.35 }), 0.72);
+  nariz.scale.x = 1.25;
+  nariz.position.set(0, 0.005, 0.30);
+  cabeca.add(nariz);
+  // boca: sulco abaixo do nariz
+  const boca = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.011, 6, 14, Math.PI), mat(0x5a3a22, { roughness: 0.6 }));
+  boca.position.set(0, -0.085, 0.275);
+  boca.rotation.z = Math.PI;
+  cabeca.add(boca);
+
+  for (const lado of [-1, 1]) {
+    // orelha com espessura: disco externo + interior claro
+    const orelha = esfera(0.092, mUrso, 0.95);
+    orelha.scale.z = 0.55;
+    orelha.position.set(lado * 0.175, 0.185, -0.01);
+    cabeca.add(orelha);
+    const dentro = esfera(0.055, mClaro, 0.9);
+    dentro.scale.z = 0.5;
+    dentro.position.set(lado * 0.178, 0.182, 0.045);
+    cabeca.add(dentro);
+
+    // olho com brilho
+    const olho = esfera(0.036, mat(0x140f0a, { roughness: 0.22 }), 1.08);
+    olho.position.set(lado * 0.095, 0.045, 0.196);
+    cabeca.add(olho);
+    const brilho = esfera(0.012, mat(0xffffff, { roughness: 0.1 }));
+    brilho.position.set(lado * 0.105, 0.065, 0.218);
+    cabeca.add(brilho);
+    // sobrancelha, dá expressão
+    const sob = esfera(0.045, matPelo(0x5a3618, 0x3d2410, 0x7a4d24), 0.35);
+    sob.scale.z = 0.5;
+    sob.position.set(lado * 0.095, 0.105, 0.185);
+    sob.rotation.z = lado * 0.25;
+    cabeca.add(sob);
+  }
+
+  cabeca.position.y = 0.735;
+  g.add(cabeca);
+
+  // ── Braços com cotovelo ──
   const bracos = [];
   for (const lado of [-1, 1]) {
     const b = new THREE.Group();
-    const br = cilindro(0.06, 0.055, 0.28, mUrso, 10);
-    br.position.y = -0.14;
-    b.add(br);
-    const pata = esfera(0.07, mClaro);
-    pata.position.y = -0.29;
-    b.add(pata);
-    b.position.set(lado * 0.29, 0.42, 0);
-    b.rotation.z = lado * 0.3;
+    const sup = cilindro(0.072, 0.062, 0.19, mUrso, 12);
+    sup.position.y = -0.095;
+    b.add(sup);
+    const cot = new THREE.Group();
+    const inf = cilindro(0.062, 0.055, 0.17, mUrso, 12);
+    inf.position.y = -0.085;
+    cot.add(inf);
+    const pata = esfera(0.078, mUrso, 0.92);
+    pata.position.y = -0.185;
+    cot.add(pata);
+    const palma = esfera(0.05, mClaro, 0.55);
+    palma.position.set(0, -0.20, 0.045);
+    cot.add(palma);
+    cot.position.y = -0.19;
+    b.add(cot);
+
+    b.position.set(lado * 0.285, 0.44, 0);
+    b.rotation.z = lado * 0.28;
     g.add(b);
     bracos.push(b);
   }
+
+  // ── Pernas com pata e dedinhos ──
   for (const lado of [-1, 1]) {
-    const perna = cilindro(0.075, 0.07, 0.16, mUrso, 10);
-    perna.position.set(lado * 0.12, 0.08, 0);
+    const perna = cilindro(0.088, 0.08, 0.17, mUrso, 12);
+    perna.position.set(lado * 0.125, 0.085, 0);
     g.add(perna);
-    const pe = esfera(0.085, mClaro, 0.7);
-    pe.position.set(lado * 0.12, 0.02, 0.05);
-    pe.scale.z = 1.3;
+    const pe = esfera(0.098, mUrso, 0.72);
+    pe.scale.z = 1.35;
+    pe.position.set(lado * 0.125, 0.045, 0.045);
     g.add(pe);
+    const sola = esfera(0.062, mClaro, 0.42);
+    sola.scale.z = 1.25;
+    sola.position.set(lado * 0.125, 0.03, 0.075);
+    g.add(sola);
+    for (let d = -1; d <= 1; d++) {
+      const dedo = esfera(0.022, mClaro, 0.8);
+      dedo.position.set(lado * 0.125 + d * 0.036, 0.055, 0.135);
+      g.add(dedo);
+    }
   }
 
-  g.userData = { bracos };
+  g.userData = { bracos, cabeca };
   return g;
 }
 
-/** Dálmata bombeiro. */
+/** Dálmata bombeiro, com pelo texturizado e manchas em relevo. */
 function criarDalmata() {
   const g = new THREE.Group();
-  const mBranco = mat(PALETA.cao, { roughness: 0.8 });
-  const mPreto = mat(PALETA.caoMancha, { roughness: 0.8 });
+  const mBranco = matPelo(PALETA.cao, 0xd6d0c4, 0xffffff, { roughness: 0.86 });
+  const mPreto = matPelo(PALETA.caoMancha, 0x121212, 0x4a4a4a, { roughness: 0.88 });
 
   const corpo = esfera(0.19, mBranco, 0.85);
   corpo.scale.z = 1.5;
   corpo.position.y = 0.28;
   g.add(corpo);
+
+  // peito e ombros, para o tronco não ser uma cápsula lisa
+  const peito = esfera(0.155, mBranco, 0.95);
+  peito.scale.z = 0.9;
+  peito.position.set(0, 0.30, 0.16);
+  g.add(peito);
+  const garupa = esfera(0.16, mBranco, 0.92);
+  garupa.position.set(0, 0.30, -0.20);
+  g.add(garupa);
 
   // Manchas de dálmata: precisam ser muitas e bem distribuídas, senão
   // de longe ele lê como um cachorro branco qualquer. Cada uma é
@@ -941,22 +1100,55 @@ function criarDalmata() {
   const cabeca = esfera(0.145, mBranco, 0.95);
   cabeca.position.set(0, 0.44, 0.20);
   g.add(cabeca);
-  const focinho = esfera(0.07, mBranco, 0.75);
-  focinho.position.set(0, 0.40, 0.33);
-  focinho.scale.z = 1.3;
+  // testa e maçãs do rosto
+  const testa = esfera(0.115, mBranco, 0.85);
+  testa.position.set(0, 0.50, 0.22);
+  g.add(testa);
+
+  // focinho em dois volumes: cana + bochechas
+  const focinho = esfera(0.072, mBranco, 0.78);
+  focinho.scale.z = 1.45;
+  focinho.position.set(0, 0.405, 0.335);
   g.add(focinho);
-  const nariz = esfera(0.032, mPreto, 0.8);
-  nariz.position.set(0, 0.42, 0.40);
+  for (const lado of [-1, 1]) {
+    const bochecha = esfera(0.052, mBranco, 0.85);
+    bochecha.position.set(lado * 0.045, 0.385, 0.30);
+    g.add(bochecha);
+  }
+  const nariz = esfera(0.036, mPreto, 0.78);
+  nariz.scale.x = 1.2;
+  nariz.position.set(0, 0.425, 0.415);
   g.add(nariz);
+  // boca
+  const boca = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 6, 12, Math.PI), mat(0x3a3a3a, { roughness: 0.6 }));
+  boca.position.set(0, 0.365, 0.375);
+  boca.rotation.z = Math.PI;
+  g.add(boca);
 
   for (const lado of [-1, 1]) {
-    const orelha = esfera(0.055, mPreto, 1);
-    orelha.scale.set(0.6, 1.5, 1);
-    orelha.position.set(lado * 0.13, 0.46, 0.16);
+    // orelha caída, com espessura e interior rosado
+    const orelha = esfera(0.062, mPreto, 1);
+    orelha.scale.set(0.42, 1.55, 0.95);
+    orelha.position.set(lado * 0.135, 0.44, 0.16);
+    orelha.rotation.z = lado * 0.22;
     g.add(orelha);
-    const olho = esfera(0.024, mat(0x1a1a1a, { roughness: 0.3 }));
-    olho.position.set(lado * 0.055, 0.47, 0.30);
+    const dentro = esfera(0.032, mat(0xc98a90, { roughness: 0.75 }), 1);
+    dentro.scale.set(0.3, 1.3, 0.7);
+    dentro.position.set(lado * 0.152, 0.44, 0.175);
+    g.add(dentro);
+
+    // olho com íris e brilho
+    const olho = esfera(0.028, mat(0x120d08, { roughness: 0.2 }), 1.05);
+    olho.position.set(lado * 0.058, 0.472, 0.305);
     g.add(olho);
+    const brilho = esfera(0.009, mat(0xffffff, { roughness: 0.1 }));
+    brilho.position.set(lado * 0.066, 0.486, 0.322);
+    g.add(brilho);
+    // sobrancelha clara sobre a mancha do olho
+    const sob = esfera(0.032, mBranco, 0.4);
+    sob.scale.z = 0.55;
+    sob.position.set(lado * 0.058, 0.508, 0.295);
+    g.add(sob);
   }
 
   // capacete de bombeiro
@@ -968,10 +1160,24 @@ function criarDalmata() {
   aba.position.set(0, 0.535, 0.13);
   g.add(aba);
 
+  // patas: coxa, canela e pé com dedinhos
   for (const [dx, dz] of [[-0.11, 0.14], [0.11, 0.14], [-0.11, -0.14], [0.11, -0.14]]) {
-    const pata = cilindro(0.045, 0.05, 0.20, mBranco, 8);
-    pata.position.set(dx, 0.10, dz);
-    g.add(pata);
+    const coxa = esfera(0.072, mBranco, 1);
+    coxa.scale.set(0.85, 1.0, 0.85);
+    coxa.position.set(dx, 0.20, dz);
+    g.add(coxa);
+    const canela = cilindro(0.040, 0.046, 0.17, mBranco, 10);
+    canela.position.set(dx, 0.095, dz);
+    g.add(canela);
+    const pe = esfera(0.055, mBranco, 0.62);
+    pe.scale.z = 1.25;
+    pe.position.set(dx, 0.03, dz + 0.02);
+    g.add(pe);
+    for (let d = -1; d <= 1; d++) {
+      const dedo = esfera(0.017, mBranco, 0.8);
+      dedo.position.set(dx + d * 0.024, 0.028, dz + 0.062);
+      g.add(dedo);
+    }
   }
 
   const cauda = new THREE.Group();
