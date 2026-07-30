@@ -100,6 +100,29 @@
   #carregando .flor { font-size: 62px; animation: gira 2.4s ease-in-out infinite; }
   @keyframes gira { 0%,100% { transform: rotate(-12deg) scale(1); } 50% { transform: rotate(12deg) scale(1.08); } }
 
+  /* ── Seletor de personagem ── */
+  #elenco {
+    position: fixed; left: max(12px, env(safe-area-inset-left));
+    top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 10px; z-index: 25;
+  }
+  #elenco button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 58px; height: 58px; cursor: pointer; color: #fff;
+    background: rgba(20, 30, 45, 0.42);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 16px; font-size: 25px; line-height: 1;
+    transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+  #elenco button .nome { font-size: 8.5px; font-weight: 700; margin-top: 2px; letter-spacing: 0.2px; }
+  #elenco button:active { transform: scale(0.93); }
+  #elenco button.ativo {
+    background: rgba(255, 210, 30, 0.30);
+    border-color: #ffd21e;
+    transform: scale(1.06);
+  }
+
   /* ── Dica de toque ── */
   #dica {
     position: fixed; left: 50%; transform: translateX(-50%);
@@ -129,7 +152,13 @@
   </div>
 </div>
 
-<div id="dica">Toque no chão para a Manu andar · Arraste para girar a câmera</div>
+<div id="elenco">
+  <button data-i="0" class="ativo" title="Manu">👧<span class="nome">Manu</span></button>
+  <button data-i="1" title="Dálmata Bombeiro">🐶<span class="nome">Bombeiro</span></button>
+  <button data-i="2" title="Nenão">🐻<span class="nome">Nenão</span></button>
+</div>
+
+<div id="dica">Toque no chão para andar · Arraste para girar · Troque de personagem à esquerda</div>
 <div id="balao"></div>
 
 <div id="seletor">

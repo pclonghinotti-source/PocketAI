@@ -6,29 +6,43 @@ import * as THREE from './lib/three.module.js';
 //  soltas, luz com sombra suave e câmera de terceira pessoa.
 // ══════════════════════════════════════════════════════════════
 
+// Paleta no estilo render 3D cartoon: azul de céu saturado, verdes em
+// camadas claras, vermelho de celeiro quente e madeiras alaranjadas.
 const PALETA = {
-  ceu: 0x8fc9f5,
-  ceuAlto: 0x4a90d9,
-  grama: 0x6fbf4a,
-  gramaEsc: 0x4f9a33,
-  terra: 0x8a5a35,
-  terraEsc: 0x6b4426,
+  ceu: 0x2ea3dd,
+  ceuBaixo: 0x7fd0f0,
+  grama: 0x8cc63f,
+  gramaClara: 0xa8d24f,
+  gramaEsc: 0x6ba832,
+  terra: 0x9c6236,
+  terraEsc: 0x7a4a28,
   pele: 0xf3c9a0,
   cabelo: 0x5a2d10,
   vestido: 0xe8478f,
-  celeiro: 0xc8352f,
-  telhado: 0x7d2420,
-  madeira: 0x9c6b3f,
+  celeiro: 0xd8382c,
+  celeiroEsc: 0xb62a20,
+  telhado: 0x8e3b26,
+  telhadoEsc: 0x732d1c,
+  madeira: 0xc8823c,
+  madeiraEsc: 0xa4652b,
   agua: 0x4a9fd4,
   urso: 0x8b5a2b,
   ursoClaro: 0xb98a5e,
   camisa: 0x3fbf6a,
-  cao: 0xf2f0eb,
+  cao: 0xf7f5f0,
   caoMancha: 0x2a2a2a,
   capacete: 0xd81f1f,
-  folha: 0x3f8f37,
-  folhaClara: 0x5cae4a,
-  tronco: 0x6b4a2a,
+  folha: 0x4f9e2f,
+  folhaClara: 0x6cbb3c,
+  tronco: 0x8a5a2f,
+  nuvem: 0xffffff,
+  sol: 0xffd21e,
+  solClaro: 0xffe97a,
+  moinhoParede: 0xf2ede1,
+  moinhoTelha: 0xd8382c,
+  moinhoPa: 0xd9cbb0,
+  milho: 0xf2c53d,
+  milhoFolha: 0x5aa832,
 };
 
 // ── Culturas ──────────────────────────────────────────────────
@@ -77,7 +91,7 @@ const estado = {
 // ══════════════════════════════════════════════════════════════
 const cena = new THREE.Scene();
 cena.background = new THREE.Color(PALETA.ceu);
-cena.fog = new THREE.Fog(PALETA.ceu, 26, 52);
+cena.fog = new THREE.Fog(PALETA.ceuBaixo, 38, 78);
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 200);
 
@@ -174,13 +188,82 @@ cena.add(mundo);
   mundo.add(chao);
 }
 
-// Colinas ao fundo, para dar profundidade
-for (const [x, z, r] of [[-22, -20, 9], [16, -24, 11], [30, -8, 8], [-30, -4, 7]]) {
-  const h = esfera(r, mat(PALETA.gramaEsc, { roughness: 1 }), 0.42);
-  h.position.set(x, -0.6, z);
+// Colinas em camadas: as de trás mais claras, dando a leitura de
+// profundidade em faixas que a referência usa.
+const COLINAS = [
+  [-24, -26, 12, PALETA.gramaClara, 0.38],
+  [14, -30, 15, PALETA.gramaClara, 0.34],
+  [34, -14, 11, PALETA.gramaClara, 0.36],
+  [-34, -8, 10, PALETA.gramaClara, 0.36],
+  [-16, -18, 8, PALETA.grama, 0.44],
+  [20, -20, 9, PALETA.grama, 0.42],
+  [30, 6, 9, PALETA.gramaEsc, 0.40],
+  [-30, 10, 8, PALETA.gramaEsc, 0.40],
+];
+for (const [x, z, r, cor, achata] of COLINAS) {
+  const h = esfera(r, mat(cor, { roughness: 1 }), achata);
+  h.position.set(x, -0.9, z);
+  h.castShadow = false;
   h.receiveShadow = false;
   mundo.add(h);
 }
+
+// ── Sol estilizado ────────────────────────────────────────────
+{
+  const sunGrp = new THREE.Group();
+  const disco = esfera(1.5, new THREE.MeshBasicMaterial({ color: PALETA.sol }));
+  disco.castShadow = false; disco.receiveShadow = false;
+  sunGrp.add(disco);
+  const halo = esfera(1.85, new THREE.MeshBasicMaterial({ color: PALETA.solClaro, transparent: true, opacity: 0.55 }));
+  halo.castShadow = false; halo.receiveShadow = false;
+  sunGrp.add(halo);
+  // raios triangulares em volta
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const raio = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 1.15, 4),
+      new THREE.MeshBasicMaterial({ color: PALETA.sol })
+    );
+    raio.position.set(Math.cos(a) * 2.35, Math.sin(a) * 2.35, 0);
+    raio.rotation.z = a - Math.PI / 2;
+    raio.castShadow = false; raio.receiveShadow = false;
+    sunGrp.add(raio);
+  }
+  sunGrp.position.set(17, 11.5, -36);
+  cena.add(sunGrp);
+}
+
+// ── Nuvens fofas ──────────────────────────────────────────────
+// Aglomerado de esferas: mesma leitura das nuvens da referência.
+const nuvens = [];
+function criarNuvem(x, y, z, escala) {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: PALETA.nuvem, roughness: 1, metalness: 0 });
+  const bolhas = [
+    [0, 0, 0, 1.0], [1.15, -0.12, 0.1, 0.78], [-1.1, -0.15, -0.05, 0.72],
+    [0.55, 0.42, 0.12, 0.66], [-0.5, 0.36, -0.1, 0.6], [1.9, -0.3, 0, 0.5],
+  ];
+  for (const [dx, dy, dz, r] of bolhas) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m);
+    b.position.set(dx, dy, dz);
+    b.scale.y = 0.82;
+    b.castShadow = false;
+    b.receiveShadow = false;
+    g.add(b);
+  }
+  g.position.set(x, y, z);
+  g.scale.setScalar(escala);
+  cena.add(g);
+  nuvens.push({ grupo: g, vx: 0.16 + Math.random() * 0.12, x0: x });
+  return g;
+}
+// alturas baixas de propósito: com a câmera inclinada para o chão, nuvem
+// acima de ~12 sai do enquadramento e o céu fica vazio
+for (const [x, y, z, s] of [
+  [-20, 8.5, -30, 1.5], [8, 10.5, -34, 1.8], [26, 8, -28, 1.3],
+  [-30, 11, -20, 1.2], [34, 9.5, -12, 1.4], [-12, 12, -38, 1.6],
+  [16, 7.5, -24, 1.1], [-8, 9, -26, 1.0],
+]) criarNuvem(x, y, z, s);
 
 // ── Celeiro ───────────────────────────────────────────────────
 {
@@ -218,6 +301,105 @@ for (const [x, z, r] of [[-22, -20, 9], [16, -24, 11], [30, -8, 8], [-30, -4, 7]
   celeiro.rotation.y = 0.35;
   mundo.add(celeiro);
 }
+
+// ── Moinho de vento ───────────────────────────────────────────
+let pasMoinho = null;
+{
+  const moinho = new THREE.Group();
+
+  // torre levemente cônica
+  const torre = torneado([
+    [1.42, 0], [1.36, 0.9], [1.24, 2.2], [1.10, 3.4], [1.02, 4.2], [0, 4.25],
+  ], mat(PALETA.moinhoParede, { roughness: 0.85 }), 26);
+  moinho.add(torre);
+
+  // faixa de pedra na base
+  const base = cilindro(1.46, 1.52, 0.5, mat(0xe0d8c8, { roughness: 0.95 }), 26);
+  base.position.y = 0.25;
+  moinho.add(base);
+
+  // telhado cônico vermelho
+  const telha = new THREE.Mesh(
+    new THREE.ConeGeometry(1.5, 1.5, 26),
+    mat(PALETA.moinhoTelha, { roughness: 0.75 })
+  );
+  telha.position.y = 4.95;
+  telha.castShadow = true;
+  moinho.add(telha);
+
+  // porta arqueada
+  const porta = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.42, 0.12, 16, 1, false, 0, Math.PI),
+    mat(PALETA.madeiraEsc, { roughness: 0.8 })
+  );
+  porta.rotation.set(Math.PI / 2, 0, 0);
+  porta.position.set(0, 0.95, 1.30);
+  porta.castShadow = true;
+  moinho.add(porta);
+  const portaBase = caixa(0.84, 0.95, 0.12, mat(PALETA.madeiraEsc, { roughness: 0.8 }));
+  portaBase.position.set(0, 0.475, 1.30);
+  moinho.add(portaBase);
+
+  // janelinha
+  const jan = caixa(0.44, 0.56, 0.1, mat(0x2f8fb5, { roughness: 0.4 }));
+  jan.position.set(0, 2.6, 1.22);
+  moinho.add(jan);
+
+  // eixo + pás
+  const eixo = cilindro(0.14, 0.14, 0.5, mat(PALETA.telhadoEsc, { roughness: 0.7 }), 12);
+  eixo.rotation.x = Math.PI / 2;
+  eixo.position.set(0, 4.1, 1.35);
+  moinho.add(eixo);
+
+  pasMoinho = new THREE.Group();
+  pasMoinho.position.set(0, 4.1, 1.55);
+  for (let i = 0; i < 4; i++) {
+    const pa = new THREE.Group();
+    const haste = caixa(0.26, 3.5, 0.12, mat(PALETA.moinhoPa, { roughness: 0.8 }));
+    haste.position.y = 1.75;
+    pa.add(haste);
+    // travessas da pá, como na referência
+    for (let k = 0; k < 6; k++) {
+      const t = caixa(0.62, 0.12, 0.09, mat(PALETA.moinhoPa, { roughness: 0.8 }));
+      t.position.set(0, 0.55 + k * 0.52, 0.02);
+      pa.add(t);
+    }
+    pa.rotation.z = (i / 4) * Math.PI * 2;
+    pasMoinho.add(pa);
+  }
+  moinho.add(pasMoinho);
+
+  moinho.position.set(-2.5, 0, -11.5);
+  moinho.rotation.y = 0.22;
+  mundo.add(moinho);
+}
+
+// ── Milharal ──────────────────────────────────────────────────
+function peMilho(x, z) {
+  const g = new THREE.Group();
+  const caule = cilindro(0.05, 0.07, 1.5, mat(PALETA.milhoFolha, { roughness: 0.9 }), 8);
+  caule.position.y = 0.75;
+  g.add(caule);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + Math.random();
+    const folha = esfera(0.30, mat(PALETA.milhoFolha, { roughness: 0.9 }), 0.16);
+    folha.scale.z = 1.7;
+    folha.position.set(Math.cos(a) * 0.22, 0.55 + i * 0.2, Math.sin(a) * 0.22);
+    folha.rotation.set(0.5, -a, 0.4);
+    g.add(folha);
+  }
+  const espiga = cilindro(0.07, 0.09, 0.36, mat(PALETA.milho, { roughness: 0.7 }), 10);
+  espiga.position.set(0.14, 1.05, 0.05);
+  espiga.rotation.z = -0.3;
+  g.add(espiga);
+  const topo = cilindro(0.005, 0.045, 0.34, mat(0xdcc06a, { roughness: 0.9 }), 6);
+  topo.position.y = 1.62;
+  g.add(topo);
+  g.position.set(x, 0, z);
+  g.rotation.y = Math.random() * Math.PI;
+  mundo.add(g);
+}
+for (let i = 0; i < 9; i++) peMilho(6.2 + (i % 3) * 0.95, -6.5 + Math.floor(i / 3) * 1.0);
 
 // ── Árvores (copa em 3 camadas, dá silhueta melhor que 1 esfera) ──
 function arvore(x, z, escala = 1) {
@@ -363,6 +545,37 @@ function construirPlanta(cultura, estagio) {
     }
   }
   return g;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Colisão
+// ══════════════════════════════════════════════════════════════
+// Física completa seria exagero para o que o jogo precisa: basta o
+// personagem não atravessar objetos. Cada obstáculo é um círculo no
+// plano XZ; ao empurrar contra um, o movimento desliza pela borda em
+// vez de travar, que é o que evita a sensação de "grudar na parede".
+const obstaculos = [];
+const addObstaculo = (x, z, r) => obstaculos.push({ x, z, r });
+
+// cercado: limites externos da área jogável
+const LIMITE = { minX: -13.5, maxX: 13.5, minZ: -13.5, maxZ: 8.2 };
+
+/** Ajusta um deslocamento para não entrar em nenhum obstáculo. */
+function resolverColisao(px, pz, nx, nz, raioCorpo) {
+  let x = nx, z = nz;
+  for (const o of obstaculos) {
+    const dx = x - o.x, dz = z - o.z;
+    const alcance = o.r + raioCorpo;
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= alcance * alcance || d2 === 0) continue;
+    const d = Math.sqrt(d2);
+    // empurra para fora, exatamente até a borda
+    x = o.x + (dx / d) * alcance;
+    z = o.z + (dz / d) * alcance;
+  }
+  x = Math.max(LIMITE.minX, Math.min(LIMITE.maxX, x));
+  z = Math.max(LIMITE.minZ, Math.min(LIMITE.maxZ, z));
+  return { x, z };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -718,19 +931,117 @@ function criarDalmata() {
   return g;
 }
 
+// A frente do personagem é +Z local, então rotation.y = PI faz olhar
+// para -Z, que é onde ficam canteiros, celeiro e moinho. Sem isso eles
+// nascem de costas para a fazenda e a câmera cai dentro do cenário.
+const OLHANDO_PRA_FAZENDA = Math.PI;
+
 const manu = criarManu();
-manu.position.set(0, 0, 4.5);
+manu.position.set(0, 0, 6.0);
+manu.rotation.y = OLHANDO_PRA_FAZENDA;
 mundo.add(manu);
 
 const nenao = criarNenao();
-nenao.position.set(-4.6, 0, -0.5);
-nenao.rotation.y = 0.7;
+nenao.position.set(-4.6, 0, 3.2);
+nenao.rotation.y = OLHANDO_PRA_FAZENDA - 0.5;
 mundo.add(nenao);
 
 const dalmata = criarDalmata();
-dalmata.position.set(1.6, 0, 5.4);
-dalmata.rotation.y = -0.4;
+dalmata.position.set(2.2, 0, 6.6);
+dalmata.rotation.y = OLHANDO_PRA_FAZENDA + 0.4;
 mundo.add(dalmata);
+
+// ── Obstáculos sólidos ────────────────────────────────────────
+// Registrados depois que tudo existe, para bater com as posições reais.
+addObstaculo(-7.5, -5.5, 2.6);      // celeiro
+addObstaculo(-2.5, -11.5, 1.9);     // moinho
+addObstaculo(8.5, 7, 3.0);          // lago
+for (const [x, z, s] of [[-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15],
+                         [12, 4, 0.95], [6, -9, 1.0], [-4, -11, 1.05], [-13, -8, 0.85]]) {
+  addObstaculo(x, z, 0.5 * s);      // troncos das árvores
+}
+for (let i = 0; i < 9; i++) {
+  addObstaculo(6.2 + (i % 3) * 0.95, -6.5 + Math.floor(i / 3) * 1.0, 0.28); // milharal
+}
+
+// ── Elenco jogável ────────────────────────────────────────────
+// Cada um anda a seu jeito: a Manu tem articulações completas, o
+// cachorro é rápido e saltitante, o urso é lento e pesado.
+let passoDoAtor = 0;
+
+const ATORES = [
+  {
+    nome: 'Manu', emoji: '👧', node: manu, velocidade: 2.9, raio: 0.34, alturaCam: 1.15, dist: 7.4,
+    animar(t, dt, andando) {
+      const u = manu.userData;
+      if (andando) {
+        passoDoAtor += dt * 8.5;
+        const s = Math.sin(passoDoAtor), c = Math.cos(passoDoAtor);
+        u.bracos[0].pivo.rotation.x = s * 0.62;
+        u.bracos[1].pivo.rotation.x = -s * 0.62;
+        u.bracos[0].cotovelo.rotation.x = -Math.max(0, s) * 0.5 - 0.12;
+        u.bracos[1].cotovelo.rotation.x = -Math.max(0, -s) * 0.5 - 0.12;
+        u.pernas[0].pivo.rotation.x = -s * 0.55;
+        u.pernas[1].pivo.rotation.x = s * 0.55;
+        u.pernas[0].joelho.rotation.x = Math.max(0, s) * 0.7;
+        u.pernas[1].joelho.rotation.x = Math.max(0, -s) * 0.7;
+        manu.position.y = Math.abs(s) * 0.045;
+        u.torso.rotation.z = c * 0.035;
+        for (const tr of u.trancas) tr.rotation.x = s * 0.32;
+      } else {
+        const r = Math.sin(t * 1.7) * 0.05;
+        for (const b of u.bracos) {
+          b.pivo.rotation.x += (r * 0.4 - b.pivo.rotation.x) * Math.min(1, dt * 5);
+          b.cotovelo.rotation.x += (-0.18 - b.cotovelo.rotation.x) * Math.min(1, dt * 5);
+        }
+        for (const p of u.pernas) {
+          p.pivo.rotation.x += (0 - p.pivo.rotation.x) * Math.min(1, dt * 5);
+          p.joelho.rotation.x += (0 - p.joelho.rotation.x) * Math.min(1, dt * 5);
+        }
+        manu.position.y += (0 - manu.position.y) * Math.min(1, dt * 6);
+        u.torso.scale.y = 1 + Math.sin(t * 1.7) * 0.018;
+        u.torso.rotation.z += (0 - u.torso.rotation.z) * Math.min(1, dt * 5);
+        for (const tr of u.trancas) tr.rotation.x = r * 0.6;
+      }
+      u.cabeca.rotation.z = Math.sin(t * 1.1) * 0.045;
+    },
+  },
+  {
+    nome: 'Bombeiro', emoji: '🐶', node: dalmata, velocidade: 3.8, raio: 0.30, alturaCam: 0.85, dist: 6.2,
+    animar(t, dt, andando) {
+      // trote: saltinho curto e rápido, rabo acelera quando corre
+      if (andando) {
+        passoDoAtor += dt * 13;
+        dalmata.position.y = Math.abs(Math.sin(passoDoAtor)) * 0.075;
+        dalmata.rotation.z = Math.sin(passoDoAtor * 0.5) * 0.05;
+      } else {
+        dalmata.position.y += (0 - dalmata.position.y) * Math.min(1, dt * 8);
+        dalmata.rotation.z += (0 - dalmata.rotation.z) * Math.min(1, dt * 8);
+      }
+      dalmata.userData.cauda.rotation.z = Math.sin(t * (andando ? 20 : 11)) * 0.5;
+    },
+  },
+  {
+    nome: 'Nenão', emoji: '🐻', node: nenao, velocidade: 2.0, raio: 0.42, alturaCam: 1.05, dist: 7.0,
+    animar(t, dt, andando) {
+      // gingado pesado de urso
+      if (andando) {
+        passoDoAtor += dt * 6.5;
+        const s = Math.sin(passoDoAtor);
+        nenao.position.y = Math.abs(s) * 0.05;
+        nenao.rotation.z = s * 0.08;
+        nenao.userData.bracos[0].rotation.x = s * 0.5;
+        nenao.userData.bracos[1].rotation.x = -s * 0.5;
+      } else {
+        nenao.position.y += (0 - nenao.position.y) * Math.min(1, dt * 6);
+        nenao.rotation.z += (0 - nenao.rotation.z) * Math.min(1, dt * 6);
+        nenao.userData.bracos[0].rotation.x *= 0.9;
+        nenao.userData.bracos[1].rotation.z = -0.3 + Math.sin(t * 3) * 0.5;
+      }
+    },
+  },
+];
+let atorAtivo = 0;
 
 function textoTextura(txt, px = 128) {
   const cv = document.createElement('canvas');
@@ -1024,6 +1335,22 @@ function atualizarHUD() {
   }
 }
 
+// ── Troca de personagem ───────────────────────────────────────
+function trocarAtor(i) {
+  if (i === atorAtivo) return;
+  atorAtivo = i;
+  destino = null;          // cancela o caminho do anterior
+  passoDoAtor = 0;
+  for (const b of document.querySelectorAll('#elenco button')) {
+    b.classList.toggle('ativo', +b.dataset.i === i);
+  }
+  const a = ATORES[i];
+  falar(`Agora você controla ${a.nome}! ${a.emoji}`, 2200);
+}
+for (const btn of document.querySelectorAll('#elenco button')) {
+  btn.addEventListener('click', () => trocarAtor(+btn.dataset.i));
+}
+
 let vozAtiva = true;
 el('somBtn').addEventListener('click', () => {
   vozAtiva = !vozAtiva;
@@ -1158,7 +1485,8 @@ function festa() {
       new THREE.PlaneGeometry(0.12, 0.12),
       new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.85, 0.6), side: THREE.DoubleSide })
     );
-    c.position.set(manu.position.x + (Math.random() - 0.5) * 2, 2.4 + Math.random() * 1.4, manu.position.z + (Math.random() - 0.5) * 2);
+    const p = ATORES[atorAtivo].node.position;   // confete cai sobre quem joga
+    c.position.set(p.x + (Math.random() - 0.5) * 2, 2.4 + Math.random() * 1.4, p.z + (Math.random() - 0.5) * 2);
     c.userData = { vy: -1.1 - Math.random(), rx: Math.random() * 6, ry: Math.random() * 6 };
     mundo.add(c);
     confetes.push(c);
@@ -1269,79 +1597,63 @@ let passoAndar = 0;
 const alvoCam = new THREE.Vector3();
 const miraCam = new THREE.Vector3(0, 1.15, 4.5);
 
-// Enquadramento: mais afastado e alto que a primeira versão, em que a
-// Manu ficava pequena e de costas colada na base da tela.
+// Enquadramento: câmera mais baixa e mira acima da linha do horizonte,
+// para o céu com sol e nuvens entrar no quadro em vez de só o gramado.
 const DIST_CAM = 7.4;
-const ALT_CAM = 5.4;
+const ALT_CAM = 4.1;
+const ALTURA_MIRA_EXTRA = 1.5;
 
 function tick() {
   const dt = Math.min(relogio.getDelta(), 0.05);
   const t = relogio.elapsedTime;
 
-  // movimento da Manu
+  // movimento do personagem ativo, com colisão
+  const ator = ATORES[atorAtivo];
+  const corpoAtor = ator.node;
   let andando = false;
   if (destino) {
-    const dir = new THREE.Vector3().subVectors(destino, manu.position);
+    const dir = new THREE.Vector3().subVectors(destino, corpoAtor.position);
     dir.y = 0;
     const dist = dir.length();
-    if (dist > 0.12) {
+    if (dist > 0.14) {
       dir.normalize();
-      manu.position.addScaledVector(dir, dt * 2.6);
+      const passo = dt * ator.velocidade;
+      const alvo = resolverColisao(
+        corpoAtor.position.x, corpoAtor.position.z,
+        corpoAtor.position.x + dir.x * passo,
+        corpoAtor.position.z + dir.z * passo,
+        ator.raio
+      );
+      // se a colisão zerou o avanço, desiste do destino em vez de patinar
+      const avancou = Math.hypot(alvo.x - corpoAtor.position.x, alvo.z - corpoAtor.position.z);
+      corpoAtor.position.x = alvo.x;
+      corpoAtor.position.z = alvo.z;
+      if (avancou < passo * 0.15) destino = null;
+
       const alvoRot = Math.atan2(dir.x, dir.z);
-      // interpola o ângulo pelo caminho curto
-      let d = alvoRot - manu.rotation.y;
+      let d = alvoRot - corpoAtor.rotation.y;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      manu.rotation.y += d * Math.min(1, dt * 9);
-      andando = true;
+      corpoAtor.rotation.y += d * Math.min(1, dt * 9);
+      andando = avancou > 0.0005;
     } else destino = null;
   }
 
-  // animação de caminhada / respiração
-  const u = manu.userData;
-  if (andando) {
-    passoAndar += dt * 8.5;
-    const s = Math.sin(passoAndar);
-    const c = Math.cos(passoAndar);
-    // braços: ombro balança, cotovelo dobra sempre para trás
-    u.bracos[0].pivo.rotation.x = s * 0.62;
-    u.bracos[1].pivo.rotation.x = -s * 0.62;
-    u.bracos[0].cotovelo.rotation.x = -Math.max(0, s) * 0.5 - 0.12;
-    u.bracos[1].cotovelo.rotation.x = -Math.max(0, -s) * 0.5 - 0.12;
-    // pernas: quadril alterna, joelho dobra na fase de recuo
-    u.pernas[0].pivo.rotation.x = -s * 0.55;
-    u.pernas[1].pivo.rotation.x = s * 0.55;
-    u.pernas[0].joelho.rotation.x = Math.max(0, s) * 0.7;
-    u.pernas[1].joelho.rotation.x = Math.max(0, -s) * 0.7;
-    // sobe e desce a cada passo, e inclina o tronco de leve
-    manu.position.y = Math.abs(Math.sin(passoAndar)) * 0.045;
-    u.torso.rotation.z = c * 0.035;
-    u.cabeca.position.x = c * 0.012;
-    for (const tr of u.trancas) tr.rotation.x = s * 0.32;
-  } else {
-    passoAndar = 0;
-    const r = Math.sin(t * 1.7) * 0.05;
-    for (const b of u.bracos) {
-      b.pivo.rotation.x += (r * 0.4 - b.pivo.rotation.x) * Math.min(1, dt * 5);
-      b.cotovelo.rotation.x += (-0.18 - b.cotovelo.rotation.x) * Math.min(1, dt * 5);
-    }
-    for (const p of u.pernas) {
-      p.pivo.rotation.x += (0 - p.pivo.rotation.x) * Math.min(1, dt * 5);
-      p.joelho.rotation.x += (0 - p.joelho.rotation.x) * Math.min(1, dt * 5);
-    }
-    manu.position.y += (0 - manu.position.y) * Math.min(1, dt * 6);
-    // respiração no torso
-    u.torso.scale.y = 1 + Math.sin(t * 1.7) * 0.018;
-    u.torso.rotation.z += (0 - u.torso.rotation.z) * Math.min(1, dt * 5);
-    u.cabeca.position.x += (0 - u.cabeca.position.x) * Math.min(1, dt * 5);
-    for (const tr of u.trancas) tr.rotation.x = r * 0.6;
+  // anima o ator ativo com seu próprio andar; os outros ficam ociosos
+  if (!andando) passoDoAtor = 0;
+  ator.animar(t, dt, andando);
+  for (let i = 0; i < ATORES.length; i++) {
+    if (i !== atorAtivo) ATORES[i].animar(t, dt, false);
   }
-  u.cabeca.rotation.z = Math.sin(t * 1.1) * 0.045;
-  u.cabeca.rotation.y = Math.sin(t * 0.6) * 0.10;
 
-  // Nenão acena, cachorro abana o rabo
-  nenao.userData.bracos[1].rotation.z = -0.3 + Math.sin(t * 3) * 0.5;
-  dalmata.userData.cauda.rotation.z = Math.sin(t * 11) * 0.5;
+  // pás do moinho girando
+  if (pasMoinho) pasMoinho.rotation.z += dt * 0.55;
+
+  // nuvens andando devagar, reaparecendo do outro lado
+  for (const n of nuvens) {
+    n.grupo.position.x += n.vx * dt;
+    if (n.grupo.position.x > 46) n.grupo.position.x = -46;
+  }
 
   // animais respiram e balançam de leve
   for (const a of animaisMesh) {
@@ -1380,22 +1692,29 @@ function tick() {
     if (c.position.y < 0) { mundo.remove(c); confetes.splice(i, 1); }
   }
 
-  // Câmera de terceira pessoa: mais alta e afastada que antes, com o
-  // ponto de mira acima da cintura para a Manu não ficar no rodapé.
-  // O arrasto horizontal do dedo/mouse gira em torno dela.
-  const ang = manu.rotation.y + orbita;
+  // Câmera de terceira pessoa seguindo quem está sendo controlado.
+  // Cada ator tem sua distância: o cachorro é baixo, então a câmera
+  // chega mais perto; o urso é largo e pede mais recuo.
+  const ang = corpoAtor.rotation.y + orbita;
   alvoCam.set(
-    manu.position.x - Math.sin(ang) * DIST_CAM,
+    corpoAtor.position.x - Math.sin(ang) * ator.dist,
     ALT_CAM,
-    manu.position.z - Math.cos(ang) * DIST_CAM
+    corpoAtor.position.z - Math.cos(ang) * ator.dist
   );
   camera.position.lerp(alvoCam, 1 - Math.pow(0.0015, dt));
-  miraCam.lerp(new THREE.Vector3(manu.position.x, manu.position.y + 1.15, manu.position.z), 1 - Math.pow(0.002, dt));
+  miraCam.lerp(
+    new THREE.Vector3(
+      corpoAtor.position.x,
+      corpoAtor.position.y + ator.alturaCam + ALTURA_MIRA_EXTRA,
+      corpoAtor.position.z
+    ),
+    1 - Math.pow(0.002, dt)
+  );
   camera.lookAt(miraCam);
 
-  // o sol acompanha a personagem para a sombra não sair do mapa
-  sol.position.set(manu.position.x + 9, 14, manu.position.z + 7);
-  sol.target.position.copy(manu.position);
+  // o sol acompanha quem joga, para a sombra não sair do mapa
+  sol.position.set(corpoAtor.position.x + 9, 14, corpoAtor.position.z + 7);
+  sol.target.position.copy(corpoAtor.position);
   sol.target.updateMatrixWorld();
 
   renderer.render(cena, camera);
@@ -1410,7 +1729,11 @@ addEventListener('resize', () => {
 
 // ── Início ────────────────────────────────────────────────────
 // exposto para inspeção no console durante o desenvolvimento
-window.__jogo = { cena, mundo, animaisMesh, manu, estado, THREE };
+window.__jogo = {
+  cena, mundo, animaisMesh, manu, estado, THREE,
+  ATORES, obstaculos, resolver: resolverColisao,
+  get atorAtivo() { return atorAtivo; },
+};
 
 cena.add(sol.target);
 carregar();
