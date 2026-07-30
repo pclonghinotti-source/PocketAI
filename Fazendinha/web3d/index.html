@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fazenda da Manu">
+<title>🌻 A Fazenda da Manu</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: #8fc9f5; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  #cena { position: fixed; inset: 0; }
+  #cena canvas { display: block; }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed; inset: 0; z-index: 10;
+    pointer-events: none;
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  #barra { display: flex; gap: 10px; align-items: center; width: 100%; }
+  .selo {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(20, 30, 45, 0.42);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 999px; padding: 7px 14px;
+    color: #fff; font-size: 17px; font-weight: 650;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  }
+  .selo .ic { font-size: 20px; }
+  #somBtn {
+    margin-left: auto; pointer-events: auto; cursor: pointer;
+    background: rgba(20, 30, 45, 0.42);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 50%; width: 42px; height: 42px; font-size: 19px; color: #fff;
+  }
+  #missao {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255, 255, 255, 0.22);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 16px; padding: 9px 16px; max-width: min(92%, 420px);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+  }
+  #missaoIcone { font-size: 22px; }
+  #missaoTitulo { color: #fff; font-size: 14px; font-weight: 650; text-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  #missaoProg { color: #ffe45c; font-size: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+
+  /* ── Balão de fala ── */
+  #balao {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    background: rgba(20, 30, 45, 0.72);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    color: #fff; border-radius: 20px; padding: 12px 20px;
+    font-size: 16px; font-weight: 550; text-align: center;
+    max-width: min(84%, 460px); display: none; z-index: 20;
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.24);
+  }
+
+  /* ── Seletor de sementes ── */
+  #seletor {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(22px + env(safe-area-inset-bottom));
+    display: none; gap: 12px; z-index: 30;
+    background: rgba(255,255,255,0.2);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 24px; padding: 14px 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+  #seletor button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    width: 66px; height: 66px; cursor: pointer; color: #fff;
+    background: linear-gradient(160deg, rgba(150,95,50,0.9), rgba(105,65,32,0.9));
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 18px; font-size: 30px;
+    transition: transform 0.12s ease;
+  }
+  #seletor button:active { transform: scale(0.92); }
+  #seletor button .nome { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+
+  /* ── Carregando ── */
+  #carregando {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: linear-gradient(180deg, #8fc9f5, #6fbf4a);
+    color: #fff; font-size: 20px; font-weight: 650;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+  #carregando .flor { font-size: 62px; animation: gira 2.4s ease-in-out infinite; }
+  @keyframes gira { 0%,100% { transform: rotate(-12deg) scale(1); } 50% { transform: rotate(12deg) scale(1.08); } }
+
+  /* ── Dica de toque ── */
+  #dica {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(90px + env(safe-area-inset-bottom));
+    color: #fff; font-size: 12.5px; font-weight: 600; opacity: 0.82;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5); z-index: 15; pointer-events: none;
+    text-align: center; transition: opacity 0.6s;
+  }
+</style>
+</head>
+<body>
+
+<div id="cena"></div>
+
+<div id="hud">
+  <div id="barra">
+    <div class="selo"><span class="ic">⭐</span><span id="estrelas">0</span></div>
+    <div class="selo"><span class="ic">🧺</span><span id="cesta">0</span></div>
+    <button id="somBtn" title="Ligar/desligar voz">🔊</button>
+  </div>
+  <div id="missao">
+    <span id="missaoIcone">🥕</span>
+    <div>
+      <div id="missaoTitulo">Carregando…</div>
+      <div id="missaoProg">0/1</div>
+    </div>
+  </div>
+</div>
+
+<div id="dica">Toque no chão para a Manu andar · Arraste para girar a câmera</div>
+<div id="balao"></div>
+
+<div id="seletor">
+  <button data-c="cenoura">🥕<span class="nome">Cenoura</span></button>
+  <button data-c="girassol">🌻<span class="nome">Girassol</span></button>
+  <button data-c="morango">🍓<span class="nome">Morango</span></button>
+  <button data-c="abobora">🎃<span class="nome">Abóbora</span></button>
+</div>
+
+<div id="carregando">
+  <div class="flor">🌻</div>
+  <div>A Fazenda da Manu</div>
+  <div style="font-size:14px;opacity:0.85;font-weight:500">preparando a fazenda…</div>
+</div>
+
+<script type="module" src="./game.js"></script>
+<script>
+  // a dica some depois do primeiro toque
+  addEventListener('pointerdown', () => {
+    const d = document.getElementById('dica');
+    if (d) { d.style.opacity = '0'; setTimeout(() => d.remove(), 700); }
+  }, { once: true });
+</script>
+</body>
+</html>

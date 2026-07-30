@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🌻 A Fazenda da Manu</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  background: linear-gradient(180deg, #94c5fc 0%, #b8e0ff 40%, #7ac84a 40%, #5cab30 100%);
+  height: 100vh;
+  user-select: none;
+}
+
+/* ====== GAME CONTAINER ====== */
+#game { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+/* ====== HUD ====== */
+#hud {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+#topBar {
+  display: flex; gap: 12px; align-items: center; width: 100%;
+  padding: 8px 12px; pointer-events: auto;
+}
+.badge {
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(0,0,0,0.4); border-radius: 20px; padding: 6px 12px;
+  color: #fff; font-size: 18px; font-weight: 600;
+}
+.badge span.emoji { font-size: 22px; }
+#muteBtn {
+  margin-left: auto; background: rgba(0,0,0,0.4); border: none; border-radius: 50%;
+  width: 40px; height: 40px; font-size: 20px; cursor: pointer; color: #fff;
+}
+#questCard {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.25); backdrop-filter: blur(10px);
+  border-radius: 14px; padding: 8px 12px; max-width: 90%;
+  pointer-events: auto;
+}
+#questIcon { font-size: 20px; }
+#questText { color: #fff; }
+#questTitle { font-size: 13px; font-weight: 600; }
+#questProgress { font-size: 11px; color: #ffe44d; }
+
+/* ====== SPEECH BUBBLE ====== */
+#bubble {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.6); color: #fff; border-radius: 20px;
+  padding: 10px 16px; font-size: 16px; z-index: 100;
+  max-width: 80%; text-align: center; display: none;
+}
+
+/* ====== SEED PICKER ====== */
+#seedPicker {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: none; gap: 16px; z-index: 100;
+  background: rgba(255,255,255,0.25); backdrop-filter: blur(10px);
+  border-radius: 20px; padding: 12px;
+}
+.seedBtn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(139,69,19,0.7); border: none; border-radius: 50%;
+  width: 60px; height: 60px; cursor: pointer; color: #fff;
+  font-size: 36px; justify-content: center;
+}
+.seedBtn .name { font-size: 10px; margin-top: 2px; }
+
+/* ====== FARM WORLD ====== */
+#farm {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+#farmGrid {
+  position: relative; width: 600px; height: 500px; max-width: 100vw; max-height: 100vh;
+}
+
+/* Canteiros 3x3 */
+.plots {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: grid; grid-template-columns: repeat(3, 80px); gap: 10px;
+}
+.plot {
+  width: 80px; height: 80px; background: #8B4513; border: 3px solid #6b4220;
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; cursor: pointer; position: relative;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+  transition: transform 0.1s;
+}
+.plot:active { transform: scale(0.95); }
+.plot .water-icon { position: absolute; top: 2px; right: 2px; font-size: 14px; }
+
+/* Animais */
+.animals {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 20px;
+}
+.animal {
+  width: 60px; height: 60px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; cursor: pointer;
+  font-size: 40px; position: relative; transition: transform 0.2s;
+}
+.animal:active { transform: scale(1.1); }
+.animal .hearts { font-size: 10px; position: absolute; top: -2px; }
+.animal .egg-badge {
+  position: absolute; top: -2px; right: -2px; background: #ff4444;
+  color: #fff; border-radius: 50%; width: 18px; height: 18px;
+  font-size: 11px; display: flex; align-items: center; justify-content: center;
+}
+
+/* Celeiro */
+.barn {
+  position: absolute; top: 10px; left: 10px; font-size: 60px;
+}
+/* Lago */
+.pond {
+  position: absolute; top: 10px; right: 10px; font-size: 50px;
+}
+/* Árvores */
+.tree { position: absolute; font-size: 50px; }
+.tree1 { top: 5px; left: 45%; }
+.tree2 { top: 5px; right: 30%; }
+.tree3 { bottom: 80px; left: 5px; }
+.tree4 { bottom: 80px; right: 5px; }
+
+/* Personagens */
+.character { position: absolute; font-size: 45px; transition: all 0.5s ease; z-index: 10; }
+#manu { bottom: 50%; left: 50%; transform: translate(-50%, 50%); }
+#dog { bottom: 50%; left: 55%; transform: translate(-50%, 50%); }
+#nenao { top: 20px; right: 20px; }
+
+/* Fogo */
+.fire {
+  position: absolute; font-size: 40px; cursor: pointer; z-index: 15;
+  animation: flicker 0.5s infinite alternate;
+}
+@keyframes flicker {
+  0% { transform: scale(1) rotate(-5deg); }
+  100% { transform: scale(1.2) rotate(5deg); }
+}
+
+/* Camisa */
+.shirt {
+  position: absolute; font-size: 35px; cursor: pointer; z-index: 15;
+  animation: bounce 1s infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Confete */
+.confetti {
+  position: absolute; font-size: 30px; z-index: 200; pointer-events: none;
+  animation: confettiFall 2s ease-out forwards;
+}
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* ====== TITLE OVERLAY ====== */
+#titleOverlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px;
+}
+#titleOverlay h1 { color: #fff; font-size: 32px; text-align: center; }
+#titleEmoji { font-size: 80px; }
+#titleSubtitle { color: #ffe44d; font-size: 18px; }
+#startBtn {
+  background: #4CAF50; color: #fff; border: none; border-radius: 25px;
+  padding: 12px 40px; font-size: 22px; font-weight: 600; cursor: pointer;
+}
+#startBtn:active { transform: scale(0.95); }
+
+/* ====== EGG NOTIFICATION ====== */
+.egg-notify {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 60px; z-index: 50; pointer-events: none;
+  animation: eggPop 1.5s ease-out forwards;
+}
+@keyframes eggPop {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  30% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+  100% { transform: translate(-50%, -150%) scale(1); opacity: 0; }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .plots { grid-template-columns: repeat(3, 65px); gap: 8px; }
+  .plot { width: 65px; height: 65px; font-size: 32px; }
+  .animal { width: 50px; height: 50px; font-size: 35px; }
+  .character { font-size: 38px; }
+  .barn { font-size: 50px; }
+  .pond { font-size: 40px; }
+  .tree { font-size: 40px; }
+}
+</style>
+</head>
+<body>
+<div id="game">
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="topBar">
+      <div class="badge"><span class="emoji">⭐</span><span id="stars">0</span></div>
+      <div class="badge"><span class="emoji">🧺</span><span id="basket">0</span></div>
+      <button id="muteBtn" onclick="toggleMute()">🔊</button>
+    </div>
+    <div id="questCard">
+      <span id="questIcon">🥕</span>
+      <div>
+        <div id="questTitle">Colha 1 cenourinha!</div>
+        <div id="questProgress">0/1</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Farm World -->
+  <div id="farm">
+    <div id="farmGrid">
+      <!-- Celebro -->
+      <div class="barn">🏚️</div>
+      <!-- Lago -->
+      <div class="pond">💧</div>
+      <!-- Árvores -->
+      <div class="tree tree1">🌳</div>
+      <div class="tree tree2">🌲</div>
+      <div class="tree tree3">🌴</div>
+      <div class="tree tree4">🌳</div>
+
+      <!-- Canteiros 3x3 -->
+      <div class="plots" id="plots"></div>
+
+      <!-- Animais -->
+      <div class="animals" id="animals"></div>
+
+      <!-- Personagens -->
+      <div class="character" id="manu">👧</div>
+      <div class="character" id="dog">🐕</div>
+      <div class="character" id="nenao">🐻</div>
+    </div>
+  </div>
+
+  <!-- Speech Bubble -->
+  <div id="bubble"></div>
+
+  <!-- Seed picker -->
+  <div id="seedPicker">
+    <button class="seedBtn" onclick="chooseSeed('cenoura')">🥕<div class="name">Cenoura</div></button>
+    <button class="seedBtn" onclick="chooseSeed('girassol')">🌻<div class="name">Girassol</div></button>
+    <button class="seedBtn" onclick="chooseSeed('morango')">🍓<div class="name">Morango</div></button>
+    <button class="seedBtn" onclick="chooseSeed('abobora')">🎃<div class="name">Abóbora</div></button>
+  </div>
+
+  <!-- Title overlay -->
+  <div id="titleOverlay">
+    <div id="titleEmoji">🌻</div>
+    <h1>A Fazenda da Manu</h1>
+    <div id="titleSubtitle">Toque para brincar!</div>
+    <button id="startBtn" onclick="startGame()">▶️ Começar</button>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// A FAZENDA DA MANU — Versão HTML
+// Portado do Swift/SceneKit para JavaScript
+// ============================================================
+
+// ====== CONFIG ======
+const CROPS = {
+  cenoura:  { name: "Cenoura",  emoji: "🥕", growTime: 45, stars: 1 },
+  girassol: { name: "Girassol", emoji: "🌻", growTime: 60, stars: 1 },
+  morango:  { name: "Morango",  emoji: "🍓", growTime: 75, stars: 2 },
+  abobora:  { name: "Abóbora",  emoji: "🎃", growTime: 90, stars: 2 }
+};
+
+const ANIMALS = {
+  galinha: { name: "Galinha",  emoji: "🐔", talk: "Có có!" },
+  vaca:    { name: "Vaca",     emoji: "🐄", talk: "Muuu! 🐄" },
+  ovelha:  { name: "Ovelha",   emoji: "🐑", talk: "Bééé!" },
+  porco:   { name: "Porquinho", emoji: "🐖", talk: "Oinc oinc!" }
+};
+
+const QUESTS = [
+  { id: "colheita",  icon: "🥕", title: "Colha 1 cenourinha!",           target: 1, reward: 3,  event: "harvestedCenoura" },
+  { id: "camisa",    icon: "👕", title: "Ache a camisa do Nenão!",         target: 1, reward: 5,  event: "shirtFound" },
+  { id: "bombeiro",  icon: "🚒", title: "Apague 3 foguinhos!",            target: 3, reward: 8,  event: "fireExtinguished" },
+  { id: "piquenique",icon: "🧺", title: "Colha 5 delícias pro piquenique!", target: 5, reward: 10, event: "anyHarvest" }
+];
+
+const EGG_INTERVAL = 120; // segundos
+const MAX_EGGS = 3;
+const STAR_COOLDOWN = 30; // segundos
+
+// ====== GAME STATE ======
+let state = {
+  stars: 0,
+  basket: 0,
+  plots: [],
+  animals: [],
+  questIndex: 0,
+  questProgress: 0,
+  shirtFound: false,
+  shirtSpot: null,
+  totalHarvests: 0,
+  firesExtinguished: 0,
+  muted: false,
+  selectedPlotId: null,
+  gameStarted: false
+};
+
+// Inicializar canteiros (9 plots)
+for (let i = 0; i < 9; i++) {
+  state.plots.push({ id: i, crop: null, plantedAt: null, watered: false });
+}
+
+// Inicializar animais
+for (const type of Object.keys(ANIMALS)) {
+  state.animals.push({
+    type: type,
+    hearts: 0,
+    lastFedAt: null,
+    eggsPending: 0,
+    nextEggAt: null
+  });
+}
+
+// ====== SAVE / LOAD ======
+const SAVE_KEY = "fazendinha_manu_save";
+
+function saveGame() {
+  const save = {
+    stars: state.stars,
+    basket: state.basket,
+    plots: state.plots.map(p => ({
+      id: p.id,
+      crop: p.crop,
+      plantedAt: p.plantedAt ? p.plantedAt.getTime() : null,
+      watered: p.watered
+    })),
+    animals: state.animals.map(a => ({
+      type: a.type,
+      hearts: a.hearts,
+      lastFedAt: a.lastFedAt ? a.lastFedAt.getTime() : null,
+      eggsPending: a.eggsPending,
+      nextEggAt: a.nextEggAt ? a.nextEggAt.getTime() : null
+    })),
+    questIndex: state.questIndex,
+    questProgress: state.questProgress,
+    shirtFound: state.shirtFound,
+    shirtSpot: state.shirtSpot,
+    totalHarvests: state.totalHarvests,
+    firesExtinguished: state.firesExtinguished
+  };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch(e) {}
+}
+
+function loadGame() {
+  try {
+    const data = localStorage.getItem(SAVE_KEY);
+    if (!data) return false;
+    const save = JSON.parse(data);
+    state.stars = save.stars || 0;
+    state.basket = save.basket || 0;
+    if (save.plots) {
+      state.plots = save.plots.map(p => ({
+        id: p.id,
+        crop: p.crop,
+        plantedAt: p.plantedAt ? new Date(p.plantedAt) : null,
+        watered: p.watered
+      }));
+    }
+    if (save.animals) {
+      state.animals = save.animals.map(a => ({
+        type: a.type,
+        hearts: a.hearts || 0,
+        lastFedAt: a.lastFedAt ? new Date(a.lastFedAt) : null,
+        eggsPending: a.eggsPending || 0,
+        nextEggAt: a.nextEggAt ? new Date(a.nextEggAt) : null
+      }));
+    }
+    state.questIndex = save.questIndex || 0;
+    state.questProgress = save.questProgress || 0;
+    state.shirtFound = save.shirtFound || false;
+    state.shirtSpot = save.shirtSpot || null;
+    state.totalHarvests = save.totalHarvests || 0;
+    state.firesExtinguished = save.firesExtinguished || 0;
+    return true;
+  } catch(e) { return false; }
+}
+
+// ====== SPEECH ======
+let speechSynth = window.speechSynthesis;
+let speechQueue = [];
+
+function say(text) {
+  // Mostrar bubble
+  const bubble = document.getElementById('bubble');
+  bubble.textContent = text;
+  bubble.style.display = 'block';
+  clearTimeout(bubble._timer);
+  bubble._timer = setTimeout(() => { bubble.style.display = 'none'; }, 3000);
+
+  // TTS
+  if (state.muted || !speechSynth) return;
+  try {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'pt-BR';
+    utter.rate = 0.45;
+    utter.pitch = 1.3;
+    utter.volume = 1.0;
+    speechSynth.speak(utter);
+  } catch(e) {}
+}
+
+function toggleMute() {
+  state.muted = !state.muted;
+  document.getElementById('muteBtn').textContent = state.muted ? '🔇' : '🔊';
+  if (state.muted) speechSynth.cancel();
+}
+
+// ====== CROP SYSTEM ======
+function cropStage(plot) {
+  if (!plot.crop || !plot.plantedAt) return 'empty';
+  const crop = CROPS[plot.crop];
+  const elapsed = (Date.now() - plot.plantedAt.getTime()) / 1000;
+  const stageDuration = crop.growTime / 3;
+
+  let stage;
+  if (elapsed < stageDuration) stage = 'seed';
+  else if (elapsed < 2 * stageDuration) stage = 'sprout';
+  else if (elapsed < crop.growTime) stage = 'growing';
+  else stage = 'ready';
+
+  // Sem água não passa do broto
+  if (!plot.watered && (stage === 'growing' || stage === 'ready')) stage = 'sprout';
+  return stage;
+}
+
+function plant(plotId, type) {
+  const plot = state.plots[plotId];
+  if (!plot || plot.crop) return;
+  plot.crop = type;
+  plot.plantedAt = new Date();
+  plot.watered = false;
+  saveGame();
+  renderPlots();
+  say("Plantando sementinha! 🌱");
+}
+
+function water(plotId) {
+  const plot = state.plots[plotId];
+  if (!plot || !plot.crop) return;
+  plot.watered = true;
+  saveGame();
+  renderPlots();
+  say("Que delícia, água! 💧");
+}
+
+function harvest(plotId) {
+  const plot = state.plots[plotId];
+  if (!plot) return false;
+  const stage = cropStage(plot);
+  if (stage !== 'ready' || !plot.crop) return false;
+
+  const cropType = plot.crop;
+  const crop = CROPS[cropType];
+  plot.crop = null;
+  plot.plantedAt = null;
+  plot.watered = false;
+  state.totalHarvests++;
+  state.basket++;
+  state.stars += crop.stars;
+  saveGame();
+  renderPlots();
+  updateHUD();
+  advanceQuest(cropType === 'cenoura' ? 'harvestedCenoura' : 'anyHarvest');
+  say("Colhi " + crop.name + "! " + crop.emoji);
+  return true;
+}
+
+// ====== ANIMAL SYSTEM ======
+function pet(animalType) {
+  const animal = state.animals.find(a => a.type === animalType);
+  if (!animal) return;
+  animal.hearts = Math.min(animal.hearts + 1, 3);
+
+  const now = new Date();
+  let gaveStar = false;
+  if (animal.lastFedAt && (now - animal.lastFedAt) / 1000 < STAR_COOLDOWN) {
+    gaveStar = false;
+  } else {
+    gaveStar = true;
+  }
+  animal.lastFedAt = now;
+
+  if (gaveStar) {
+    state.stars++;
+    updateHUD();
+  }
+  renderAnimals();
+  say(ANIMALS[animalType].talk);
+  saveGame();
+}
+
+function collectEgg() {
+  const chicken = state.animals.find(a => a.type === 'galinha');
+  if (!chicken || chicken.eggsPending <= 0) return false;
+  chicken.eggsPending--;
+  state.basket++;
+  state.stars++;
+  saveGame();
+  renderAnimals();
+  updateHUD();
+  advanceQuest('eggCollected');
+  say("Ovinho! 🥚");
+  return true;
+}
+
+function tickEggs() {
+  const chicken = state.animals.find(a => a.type === 'galinha');
+  if (!chicken) return;
+  const now = new Date();
+  if (!chicken.nextEggAt) {
+    chicken.nextEggAt = new Date(now.getTime() + EGG_INTERVAL * 1000);
+    return;
+  }
+  if (now >= chicken.nextEggAt) {
+    if (chicken.eggsPending < MAX_EGGS) {
+      chicken.eggsPending++;
+    }
+    chicken.nextEggAt = new Date(now.getTime() + EGG_INTERVAL * 1000);
+    renderAnimals();
+    say("A galinha botou um ovo! 🥚");
+    saveGame();
+  }
+}
+
+// ====== QUEST SYSTEM ======
+function advanceQuest(eventKind) {
+  if (state.questIndex >= QUESTS.length) return;
+  const quest = QUESTS[state.questIndex];
+  if (eventKind !== quest.event) return;
+
+  state.questProgress++;
+  if (state.questProgress >= quest.target) {
+    state.stars += quest.reward;
+    state.questIndex++;
+    state.questProgress = 0;
+    saveGame();
+    updateHUD();
+    say("Missão completa! Parabéns! 🌟");
+    if (state.questIndex >= QUESTS.length) {
+      say("🎉🎉🎉");
+      celebrate();
+    }
+  } else {
+    saveGame();
+    updateHUD();
+  }
+}
+
+// ====== FIRE SYSTEM ======
+function spawnFire() {
+  const positions = [
+    {x: '20%', y: '30%'}, {x: '70%', y: '40%'}, {x: '40%', y: '70%'},
+    {x: '80%', y: '60%'}, {x: '15%', y: '50%'}, {x: '60%', y: '20%'}
+  ];
+  const pos = positions[Math.floor(Math.random() * positions.length)];
+  const fire = document.createElement('div');
+  fire.className = 'fire';
+  fire.textContent = '🔥';
+  fire.style.left = pos.x;
+  fire.style.top = pos.y;
+  fire.onclick = () => extinguishFire(fire);
+  document.getElementById('farmGrid').appendChild(fire);
+}
+
+function extinguishFire(fireEl) {
+  fireEl.remove();
+  state.firesExtinguished++;
+  state.stars++;
+  saveGame();
+  updateHUD();
+  advanceQuest('fireExtinguished');
+  say("Fogo apagado! 🚒💦");
+}
+
+// ====== SHIRT SYSTEM ======
+function spawnShirt(spot) {
+  const positions = [
+    {x: '85%', y: '15%'}, {x: '10%', y: '20%'}, {x: '75%', y: '75%'},
+    {x: '15%', y: '80%'}, {x: '50%', y: '90%'}, {x: '5%', y: '50%'}
+  ];
+  if (spot >= positions.length) return;
+  const pos = positions[spot];
+  const shirt = document.createElement('div');
+  shirt.className = 'shirt';
+  shirt.textContent = '👕';
+  shirt.style.left = pos.x;
+  shirt.style.top = pos.y;
+  shirt.onclick = () => findShirt(shirt);
+  document.getElementById('farmGrid').appendChild(shirt);
+}
+
+function findShirt(shirtEl) {
+  if (state.shirtFound) return;
+  state.shirtFound = true;
+  state.stars += 5;
+  shirtEl.remove();
+  saveGame();
+  updateHUD();
+  advanceQuest('shirtFound');
+  say("Achei a camisa do Nenão! 👕");
+}
+
+// ====== CELEBRATE ======
+function celebrate() {
+  const emojis = ['🎉', '⭐', '🌟', '💖'];
+  for (let i = 0; i < 20; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    c.style.left = Math.random() * 100 + '%';
+    c.style.top = Math.random() * 30 + '%';
+    document.getElementById('game').appendChild(c);
+    setTimeout(() => c.remove(), 2000);
+  }
+}
+
+// ====== RENDERING ======
+function renderPlots() {
+  const container = document.getElementById('plots');
+  container.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const plot = state.plots[i];
+    const stage = cropStage(plot);
+    const div = document.createElement('div');
+    div.className = 'plot';
+    div.dataset.id = i;
+
+    let emoji = '';
+    switch (stage) {
+      case 'empty': emoji = '🟫'; break;
+      case 'seed': emoji = '🌱'; break;
+      case 'sprout': emoji = '🌿'; break;
+      case 'growing': emoji = plot.crop ? CROPS[plot.crop].emoji : '🌿'; break;
+      case 'ready': emoji = plot.crop ? CROPS[plot.crop].emoji : '🌿'; break;
+    }
+    div.textContent = emoji;
+
+    if (plot.watered && stage !== 'empty' && stage !== 'ready') {
+      const water = document.createElement('span');
+      water.className = 'water-icon';
+      water.textContent = '💧';
+      div.appendChild(water);
+    }
+
+    div.onclick = () => handlePlotTap(i);
+    container.appendChild(div);
+  }
+}
+
+function renderAnimals() {
+  const container = document.getElementById('animals');
+  container.innerHTML = '';
+  for (const animal of state.animals) {
+    const div = document.createElement('div');
+    div.className = 'animal';
+    div.textContent = ANIMALS[animal.type].emoji;
+
+    // Hearts
+    if (animal.hearts > 0) {
+      const hearts = document.createElement('span');
+      hearts.className = 'hearts';
+      hearts.textContent = '❤️'.repeat(Math.min(animal.hearts, 3));
+      div.appendChild(hearts);
+    }
+
+    // Egg badge
+    if (animal.type === 'galinha' && animal.eggsPending > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'egg-badge';
+      badge.textContent = animal.eggsPending;
+      div.appendChild(badge);
+    }
+
+    div.onclick = () => {
+      if (animal.type === 'galinha' && animal.eggsPending > 0) {
+        collectEgg();
+      } else {
+        pet(animal.type);
+      }
+    };
+    container.appendChild(div);
+  }
+}
+
+function updateHUD() {
+  document.getElementById('stars').textContent = state.stars;
+  document.getElementById('basket').textContent = state.basket;
+
+  if (state.questIndex < QUESTS.length) {
+    const q = QUESTS[state.questIndex];
+    document.getElementById('questIcon').textContent = q.icon;
+    document.getElementById('questTitle').textContent = q.title;
+    document.getElementById('questProgress').textContent = state.questProgress + '/' + q.target;
+  } else {
+    document.getElementById('questIcon').textContent = '🎉';
+    document.getElementById('questTitle').textContent = 'Parabéns! Tudo completo!';
+    document.getElementById('questProgress').textContent = '';
+  }
+}
+
+// ====== INTERACTION ======
+function handlePlotTap(id) {
+  const plot = state.plots[id];
+  const stage = cropStage(plot);
+
+  switch (stage) {
+    case 'empty':
+      state.selectedPlotId = id;
+      document.getElementById('seedPicker').style.display = 'flex';
+      break;
+    case 'seed':
+    case 'sprout':
+      water(id);
+      break;
+    case 'growing':
+      water(id);
+      break;
+    case 'ready':
+      harvest(id);
+      break;
+  }
+}
+
+function chooseSeed(type) {
+  if (state.selectedPlotId !== null) {
+    plant(state.selectedPlotId, type);
+    state.selectedPlotId = null;
+  }
+  document.getElementById('seedPicker').style.display = 'none';
+}
+
+// ====== GAME LOOP ======
+function gameTick() {
+  if (!state.gameStarted) return;
+
+  // Tick eggs
+  tickEggs();
+
+  // Tick shirt quest
+  if (state.questIndex < QUESTS.length) {
+    const q = QUESTS[state.questIndex];
+    if (q.id === 'camisa' && state.shirtSpot === null && !state.shirtFound) {
+      state.shirtSpot = Math.floor(Math.random() * 6);
+      spawnShirt(state.shirtSpot);
+      saveGame();
+    }
+  }
+
+  // Spawn fire randomly (bombeiro quest)
+  if (state.questIndex < QUESTS.length) {
+    const q = QUESTS[state.questIndex];
+    if (q.id === 'bombeiro') {
+      if (Math.random() < 0.02 && document.querySelectorAll('.fire').length < 3) {
+        spawnFire();
+      }
+    }
+  }
+
+  // Refresh plots (growth)
+  renderPlots();
+}
+
+// ====== START GAME ======
+function startGame() {
+  document.getElementById('titleOverlay').style.display = 'none';
+  state.gameStarted = true;
+
+  // Load save
+  const loaded = loadGame();
+  if (!loaded) {
+    // First time
+    saveGame();
+  }
+
+  renderPlots();
+  renderAnimals();
+  updateHUD();
+
+  // Start game loop (every 500ms)
+  setInterval(gameTick, 500);
+
+  say("Oi! Eu sou a Manu! Vamos brincar na fazenda! 🌻");
+}
+
+// ====== INIT ======
+// Render initial state
+renderPlots();
+renderAnimals();
+updateHUD();
+
+// Keyboard support
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('seedPicker').style.display = 'none';
+  }
+});
+</script>
+</body>
+</html>
