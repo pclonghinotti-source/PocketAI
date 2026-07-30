@@ -14,6 +14,9 @@ on:
       - 'project.yml'
       - '.github/workflows/fazendinha-build.yml'
 
+permissions:
+  contents: write   # necessário para publicar o Release com o .ipa
+
 jobs:
   build:
     name: Build unsigned IPA
@@ -60,3 +63,19 @@ jobs:
         with:
           name: Fazendinha-unsigned-ipa
           path: Fazendinha-unsigned.ipa
+
+      # Baixar artefato do Actions exige login; um Release em repo público dá uma
+      # URL direta — serve para instalar pelo Safari do próprio iPad, sem PC.
+      # A tag é fixa e o release é sobrescrito a cada build.
+      - name: Publicar Release com o IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: fazendinha-latest
+          name: A Fazenda da Manu — build mais recente
+          body: |
+            IPA **não assinado** do jogo, gerado automaticamente pelo commit ${{ github.sha }}.
+
+            Instalação: baixe o `.ipa` e abra no AltStore (My Apps → **+**).
+            O AltStore assina com seu Apple ID na hora da instalação.
+          files: Fazendinha-unsigned.ipa
+          fail_on_unmatched_files: true
