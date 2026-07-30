@@ -486,7 +486,7 @@ function peMilho(x, z) {
   const topo = cilindro(0.005, 0.045, 0.34, mat(0xdcc06a, { roughness: 0.9 }), 6);
   topo.position.y = 1.62;
   g.add(topo);
-  g.position.set(x, 0, z);
+  g.position.set(x, alturaTerreno(x, z), z);
   g.rotation.y = Math.random() * Math.PI;
   mundo.add(g);
 }
@@ -504,7 +504,8 @@ function arvore(x, z, escala = 1) {
     c.position.y = y;
     g.add(c);
   }
-  g.position.set(x, 0, z);
+  // assenta o tronco no relevo, senão a árvore flutua ou enterra
+  g.position.set(x, alturaTerreno(x, z) - 0.05, z);
   g.scale.setScalar(escala);
   g.rotation.y = Math.random() * Math.PI;
   mundo.add(g);
@@ -540,21 +541,42 @@ for (const [x, z, s] of ARVORES) arvore(x, z, s);
 }
 
 // ── Cercas ────────────────────────────────────────────────────
+/**
+ * Segmento de cerca acompanhando o relevo: a altura vem do terreno nas
+ * duas pontas e o segmento inclina entre elas. Sem isso, com o chão
+ * ondulado, a cerca afunda de um lado e decola do outro.
+ */
 function cerca(x, z, rotY, comp = 3) {
   const g = new THREE.Group();
   const m = mat(PALETA.madeira, { roughness: 0.9 });
+
+  // pontas do segmento no espaço do mundo, para amostrar o terreno
+  const dx = Math.cos(rotY) * (comp / 2);
+  const dz = -Math.sin(rotY) * (comp / 2);
+  const yA = alturaTerreno(x - dx, z - dz);
+  const yB = alturaTerreno(x + dx, z + dz);
+  const yMeio = (yA + yB) / 2;
+  const inclinacao = Math.atan2(yB - yA, comp);
+
   for (let i = 0; i <= 1; i++) {
     const trave = caixa(comp, 0.1, 0.07, m);
     trave.position.set(0, 0.45 + i * 0.35, 0);
     g.add(trave);
   }
+  // postes descem até o chão de cada ponto, então nenhum fica no ar
   for (const px of [-comp / 2, 0, comp / 2]) {
-    const poste = caixa(0.11, 1.0, 0.11, m);
-    poste.position.set(px, 0.5, 0);
+    const yLocal = alturaTerreno(x + Math.cos(rotY) * px, z - Math.sin(rotY) * px);
+    const enterrar = 0.35;                      // some um pouco no chão
+    const alturaPoste = 1.0 + (yLocal - yMeio) * -1 + enterrar;
+    const poste = caixa(0.11, alturaPoste, 0.11, m);
+    // compensa a inclinação do grupo para o poste ficar de pé
+    poste.position.set(px, 0.5 - enterrar / 2 - px * Math.tan(inclinacao), 0);
     g.add(poste);
   }
-  g.position.set(x, 0, z);
+
+  g.position.set(x, yMeio, z);
   g.rotation.y = rotY;
+  g.rotation.z = inclinacao;
   mundo.add(g);
 }
 // cerca acompanhando os limites do mapa ampliado
@@ -1022,7 +1044,10 @@ function criarNenao() {
     b.add(cot);
 
     b.position.set(lado * 0.285, 0.44, 0);
-    b.rotation.z = lado * 0.28;
+    // guarda a abertura de repouso: animar precisa somar a ela, nunca
+    // sobrescrever, senão o braço gira para dentro do tronco
+    b.userData.abertura = lado * 0.28;
+    b.rotation.z = b.userData.abertura;
     g.add(b);
     bracos.push(b);
   }
@@ -1287,19 +1312,27 @@ const ATORES = [
   {
     nome: 'Nenão', emoji: '🐻', node: nenao, velocidade: 2.0, raio: 0.42, alturaCam: 1.05, dist: 7.0,
     animar(t, dt, andando) {
-      // gingado pesado de urso
+      // gingado pesado de urso. O balanço vai em X (frente e trás); o Z
+      // só oscila em torno da abertura de repouso, para os braços não
+      // atravessarem o tronco.
+      const [bE, bD] = nenao.userData.bracos;
       if (andando) {
         passoDoAtor += dt * 6.5;
         const s = Math.sin(passoDoAtor);
         this.bobY = Math.abs(s) * 0.05;
         nenao.rotation.z = s * 0.08;
-        nenao.userData.bracos[0].rotation.x = s * 0.5;
-        nenao.userData.bracos[1].rotation.x = -s * 0.5;
+        bE.rotation.x = s * 0.5;
+        bD.rotation.x = -s * 0.5;
+        bE.rotation.z = bE.userData.abertura + Math.abs(s) * 0.10;
+        bD.rotation.z = bD.userData.abertura - Math.abs(s) * 0.10;
       } else {
         this.bobY += (0 - this.bobY) * Math.min(1, dt * 6);
         nenao.rotation.z += (0 - nenao.rotation.z) * Math.min(1, dt * 6);
-        nenao.userData.bracos[0].rotation.x *= 0.9;
-        nenao.userData.bracos[1].rotation.z = -0.3 + Math.sin(t * 3) * 0.5;
+        bE.rotation.x += (0 - bE.rotation.x) * Math.min(1, dt * 4);
+        bE.rotation.z += (bE.userData.abertura - bE.rotation.z) * Math.min(1, dt * 4);
+        // aceno do braço direito: abre para fora, nunca para dentro
+        bD.rotation.x = -0.55 + Math.sin(t * 3.4) * 0.28;
+        bD.rotation.z = bD.userData.abertura + 0.45 + Math.sin(t * 3.4) * 0.22;
       }
     },
   },
