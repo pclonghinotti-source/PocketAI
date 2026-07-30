@@ -89,6 +89,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pocketai.fazendinha
         INFOPLIST_FILE: Fazendinha/App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"          # universal (iPad é o foco, iPhone também roda)
         SWIFT_VERSION: "5.9"
         MARKETING_VERSION: "1.0.0"
