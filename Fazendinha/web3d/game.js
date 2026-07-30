@@ -61,6 +61,7 @@ const MISSOES = [
   { id: 'alimentar',icone: '🌾', titulo: 'Encha o cocho de comida', alvo: 1, evento: 'alimentou',  premio: 4, onde: 'cocho' },
   { id: 'carinho',  icone: '🐄', titulo: 'Faça carinho em 3 bichinhos', alvo: 3, evento: 'carinho', premio: 4, onde: 'animais' },
   { id: 'ovo',      icone: '🥚', titulo: 'Pegue um ovinho no chão', alvo: 1, evento: 'pegouOvo',   premio: 3, onde: 'ovo' },
+  { id: 'fruta',    icone: '🍎', titulo: 'Pegue 2 frutinhas que caíram', alvo: 2, evento: 'colheuFruta', premio: 4, onde: 'fruta' },
   { id: 'camisa',   icone: '👕', titulo: 'Ache a camisa do Nenão', alvo: 1, evento: 'achouCamisa', premio: 5, onde: 'camisa' },
   { id: 'colher5',  icone: '🧺', titulo: 'Colha 5 plantinhas',  alvo: 5, evento: 'colheu',         premio: 5, onde: 'canteiros' },
 ];
@@ -242,6 +243,116 @@ function matPelo(base, escuro, claro, extra = {}) {
   });
 }
 
+/**
+ * Grama: base malhada com tufos em V desenhados por cima. Repetida
+ * muitas vezes no chão, o que some com o aspecto de feltro verde liso.
+ */
+function texturaGrama(px = 512) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const c = cv.getContext('2d');
+  c.fillStyle = misturar(PALETA.grama, PALETA.grama, 0);
+  c.fillRect(0, 0, px, px);
+
+  // clareiras e sombras amplas
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * px, y = Math.random() * px;
+    const r = px * (0.04 + Math.random() * 0.14);
+    const claro = Math.random() > 0.45;
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, misturar(PALETA.grama, claro ? PALETA.gramaClara : PALETA.gramaEsc, 0.55));
+    g.addColorStop(1, misturar(PALETA.grama, claro ? PALETA.gramaClara : PALETA.gramaEsc, 0));
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+  }
+
+  // tufos: dois riscos saindo do mesmo ponto
+  c.lineCap = 'round';
+  for (let i = 0; i < 3200; i++) {
+    const x = Math.random() * px, y = Math.random() * px;
+    const h = px * (0.014 + Math.random() * 0.030);
+    const claro = Math.random() > 0.5;
+    c.strokeStyle = misturar(PALETA.grama, claro ? PALETA.gramaClara : PALETA.gramaEsc, 0.5 + Math.random() * 0.45);
+    c.lineWidth = Math.max(1.4, px / 300);
+    c.globalAlpha = 0.65 + Math.random() * 0.35;
+    for (const lado of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(x, y);
+      c.quadraticCurveTo(x + lado * h * 0.3, y - h * 0.6, x + lado * h * 0.55, y - h);
+      c.stroke();
+    }
+  }
+  c.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/** Folhagem: massa de folhinhas sobrepostas em vários verdes. */
+function texturaFolhagem(base, escuro, claro, px = 512) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const c = cv.getContext('2d');
+  c.fillStyle = misturar(base, escuro, 0.25);
+  c.fillRect(0, 0, px, px);
+
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * px, y = Math.random() * px;
+    const r = px * (0.016 + Math.random() * 0.038);
+    const t = Math.random();
+    // mistura forte: com pouco contraste a folhagem some sob a luz
+    c.fillStyle = misturar(base, t > 0.55 ? claro : escuro, 0.45 + Math.random() * 0.5);
+    c.globalAlpha = 0.7 + Math.random() * 0.3;
+    // folha: elipse inclinada
+    c.save();
+    c.translate(x, y);
+    c.rotate(Math.random() * Math.PI);
+    c.beginPath();
+    c.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+  c.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Casca: fibras verticais em tons de marrom. */
+function texturaCasca(base, px = 256) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const c = cv.getContext('2d');
+  c.fillStyle = misturar(base, base, 0);
+  c.fillRect(0, 0, px, px);
+  for (let i = 0; i < 260; i++) {
+    const x = Math.random() * px;
+    c.strokeStyle = misturar(base, Math.random() > 0.5 ? 0x4a2f18 : 0xb98a52, 0.25 + Math.random() * 0.45);
+    c.lineWidth = px * (0.004 + Math.random() * 0.014);
+    c.globalAlpha = 0.5 + Math.random() * 0.4;
+    c.beginPath();
+    c.moveTo(x, 0);
+    c.bezierCurveTo(x + (Math.random() - 0.5) * 14, px * 0.35, x + (Math.random() - 0.5) * 14, px * 0.7, x, px);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// criadas uma vez e reaproveitadas em toda a cena
+const TEX_GRAMA = texturaGrama();
+const TEX_FOLHA = texturaFolhagem(PALETA.folha, 0x2f6b22, 0x8ed14e);
+const TEX_FOLHA_CLARA = texturaFolhagem(PALETA.folhaClara, 0x3d8a2a, 0xa8de63);
+const TEX_CASCA = texturaCasca(PALETA.tronco);
+
 // ══════════════════════════════════════════════════════════════
 //  Mundo
 // ══════════════════════════════════════════════════════════════
@@ -269,7 +380,12 @@ function alturaTerreno(x, z) {
     pos.setZ(i, alturaTerreno(x, -y));
   }
   g.computeVertexNormals();
-  const chao = new THREE.Mesh(g, mat(PALETA.grama, { roughness: 0.95 }));
+  const texChao = TEX_GRAMA.clone();
+  texChao.needsUpdate = true;
+  texChao.repeat.set(55, 55);       // muitas repetições: tufos em escala de pé
+  const chao = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+    map: texChao, roughness: 0.97, metalness: 0,
+  }));
   chao.rotation.x = -Math.PI / 2;
   chao.receiveShadow = true;
   mundo.add(chao);
@@ -493,16 +609,64 @@ function peMilho(x, z) {
 for (let i = 0; i < 9; i++) peMilho(6.2 + (i % 3) * 0.95, -6.5 + Math.floor(i / 3) * 1.0);
 
 // ── Árvores (copa em 3 camadas, dá silhueta melhor que 1 esfera) ──
-function arvore(x, z, escala = 1) {
+// Frutas que as árvores dão. `cor` também tinge a fruta caída no chão.
+const FRUTAS = {
+  maca:    { nome: 'Maçã',    emoji: '🍎', cor: 0xe03a2f, estrelas: 2 },
+  laranja: { nome: 'Laranja', emoji: '🍊', cor: 0xf2900d, estrelas: 2 },
+  pera:    { nome: 'Pera',    emoji: '🍐', cor: 0xc3d94a, estrelas: 3 },
+};
+
+const arvoresFrutiferas = [];
+
+function arvore(x, z, escala = 1, fruta = null) {
   const g = new THREE.Group();
-  const tronco = cilindro(0.16, 0.22, 1.3, mat(PALETA.tronco, { roughness: 0.9 }));
+  const matCasca = new THREE.MeshStandardMaterial({ map: TEX_CASCA, roughness: 0.95 });
+  const tronco = cilindro(0.16, 0.22, 1.3, matCasca);
   tronco.position.y = 0.65;
   g.add(tronco);
-  const camadas = [[0.95, 1.45, PALETA.folha], [0.75, 2.05, PALETA.folhaClara], [0.5, 2.55, PALETA.folha]];
-  for (const [r, y, cor] of camadas) {
-    const c = esfera(r, mat(cor, { roughness: 0.88 }), 0.85);
+
+  // raízes na base, para o tronco não sair do chão como um cano
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const raiz = esfera(0.11, matCasca, 0.6);
+    raiz.scale.z = 1.6;
+    raiz.position.set(Math.cos(a) * 0.16, 0.06, Math.sin(a) * 0.16);
+    raiz.rotation.y = -a;
+    g.add(raiz);
+  }
+
+  // Cada copa recebe a textura repetida algumas vezes: em 1x1 as folhas
+  // ficam esticadas na esfera e somem, virando verde liso de novo.
+  const copaMat = (tex) => {
+    const t = tex.clone();
+    t.needsUpdate = true;
+    t.repeat.set(3, 2);
+    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.94 });
+  };
+  const camadas = [[0.95, 1.45, TEX_FOLHA], [0.75, 2.05, TEX_FOLHA_CLARA], [0.5, 2.55, TEX_FOLHA]];
+  for (const [r, y, tex] of camadas) {
+    const c = esfera(r, copaMat(tex), 0.85);
     c.position.y = y;
+    c.rotation.y = Math.random() * Math.PI;   // quebra a repetição da textura
     g.add(c);
+  }
+
+  // frutinhas penduradas: são o estoque que a árvore vai derrubando
+  if (fruta) {
+    const info = FRUTAS[fruta];
+    const penduradas = [];
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.55 + Math.random() * 0.35;
+      const f = esfera(0.115, mat(info.cor, { roughness: 0.45 }), 0.92);
+      f.position.set(Math.cos(a) * r, 1.35 + Math.random() * 0.9, Math.sin(a) * r);
+      g.add(f);
+      penduradas.push(f);
+    }
+    arvoresFrutiferas.push({
+      grupo: g, tipo: fruta, penduradas,
+      proxima: performance.now() + (8000 + Math.random() * 12000),
+    });
   }
   // assenta o tronco no relevo, senão a árvore flutua ou enterra
   g.position.set(x, alturaTerreno(x, z) - 0.05, z);
@@ -511,17 +675,19 @@ function arvore(x, z, escala = 1) {
   mundo.add(g);
   return g;
 }
+// O 4º item marca a árvore como frutífera. Elas ficam perto do centro,
+// senão a criança nunca encontra a fruta que caiu.
 const ARVORES = [
-  [-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15], [12, 4, 0.95],
-  [6, -9, 1.0], [-4, -11, 1.05], [-13, -8, 0.85],
+  [-11, -1, 1.1, 'maca'], [-9.5, 5, 0.9], [10.5, -3, 1.15, 'laranja'], [12, 4, 0.95],
+  [6, -9, 1.0, 'pera'], [-4, -11, 1.05], [-13, -8, 0.85, 'maca'],
   // bosque do mapa ampliado
-  [-19, 2, 1.2], [-22, -6, 1.0], [-17, 9, 0.95], [-24, 8, 1.1],
-  [18, -8, 1.15], [21, 1, 1.0], [17, 8, 0.9], [23, -13, 1.05],
-  [-8, 14, 1.0], [4, 15, 1.1], [13, 13, 0.95], [-15, 15, 0.9],
+  [-19, 2, 1.2], [-22, -6, 1.0], [-17, 9, 0.95, 'laranja'], [-24, 8, 1.1],
+  [18, -8, 1.15], [21, 1, 1.0], [17, 8, 0.9, 'pera'], [23, -13, 1.05],
+  [-8, 14, 1.0, 'maca'], [4, 15, 1.1], [13, 13, 0.95], [-15, 15, 0.9],
   [-20, -14, 1.0], [9, -17, 1.1], [-6, -19, 0.95], [15, -20, 1.05],
   [24, 10, 1.0], [-25, -1, 0.9],
 ];
-for (const [x, z, s] of ARVORES) arvore(x, z, s);
+for (const [x, z, s, fruta] of ARVORES) arvore(x, z, s, fruta);
 
 // ── Lago ──────────────────────────────────────────────────────
 {
@@ -1748,6 +1914,90 @@ function porOvoNoChao(x, z) {
   return g;
 }
 
+// ── Frutas que caem das árvores ───────────────────────────────
+// A árvore solta uma das frutinhas penduradas; ela cai com gravidade,
+// quica uma vez e fica no chão para ser recolhida.
+const frutasNoChao = [];
+
+function derrubarFruta(arv) {
+  const disponiveis = arv.penduradas.filter(f => f.visible);
+  if (!disponiveis.length) {
+    // repõe o galho depois de um tempo, senão a árvore seca de vez
+    arv.penduradas.forEach(f => (f.visible = true));
+    return;
+  }
+  const escolhida = disponiveis[Math.floor(Math.random() * disponiveis.length)];
+  escolhida.visible = false;
+
+  const info = FRUTAS[arv.tipo];
+  const mundoPos = escolhida.getWorldPosition(new THREE.Vector3());
+
+  const g = new THREE.Group();
+  const corpo = esfera(0.135, mat(info.cor, { roughness: 0.42 }), 0.94);
+  g.add(corpo);
+  const cabinho = cilindro(0.014, 0.016, 0.1, mat(0x5b3a1c, { roughness: 0.8 }), 6);
+  cabinho.position.y = 0.13;
+  g.add(cabinho);
+  const folhinha = esfera(0.06, mat(0x4f9e2f, { roughness: 0.8 }), 0.3);
+  folhinha.scale.z = 1.6;
+  folhinha.position.set(0.05, 0.15, 0);
+  folhinha.rotation.z = -0.6;
+  g.add(folhinha);
+
+  g.position.copy(mundoPos);
+  g.userData = { tipo: 'fruta', fruta: arv.tipo };
+  mundo.add(g);
+
+  frutasNoChao.push({
+    node: g, corpo, tipo: arv.tipo,
+    vy: 0, quicou: false,
+    chao: alturaTerreno(mundoPos.x, mundoPos.z) + 0.135,
+  });
+  falar(`Caiu uma ${info.nome.toLowerCase()}! ${info.emoji}`, 2200, 'narrador');
+}
+
+function atualizarFrutas(dt, t) {
+  const agora = performance.now();
+  for (const arv of arvoresFrutiferas) {
+    if (agora >= arv.proxima) {
+      derrubarFruta(arv);
+      arv.proxima = agora + (14000 + Math.random() * 16000);
+    }
+  }
+  for (const f of frutasNoChao) {
+    if (f.node.position.y > f.chao) {
+      f.vy -= 9.8 * dt;
+      f.node.position.y = Math.max(f.chao, f.node.position.y + f.vy * dt);
+      f.node.rotation.x += dt * 3;
+      f.node.rotation.z += dt * 2;
+    } else if (!f.quicou) {
+      f.quicou = true;
+      f.vy = 2.1;                       // quica uma vez
+      f.node.position.y = f.chao + 0.001;
+    } else {
+      // parada no chão, com balancinho para chamar atenção
+      f.node.rotation.set(0, f.node.rotation.y + dt * 0.6, 0);
+      f.node.position.y = f.chao + Math.sin(t * 3) * 0.02;
+    }
+  }
+}
+
+function colherFruta(node) {
+  const i = frutasNoChao.findIndex(f => f.node === node);
+  if (i < 0) return false;
+  const f = frutasNoChao[i];
+  const info = FRUTAS[f.tipo];
+  mundo.remove(f.node);
+  frutasNoChao.splice(i, 1);
+  estado.cesta++;
+  estado.estrelas += info.estrelas;
+  estado.frutasColhidas = (estado.frutasColhidas || 0) + 1;
+  salvar(); atualizarHUD();
+  falar(`Peguei uma ${info.nome.toLowerCase()}! ${info.emoji}`, 2200);
+  avancar('colheuFruta');
+  return true;
+}
+
 // ── Marcador da missão ────────────────────────────────────────
 // Seta flutuante sobre o objetivo atual: num mapa grande, sem isso a
 // criança não sabe para onde ir.
@@ -1782,6 +2032,7 @@ function alvoDaMissao() {
       return b ? b.grupo.position : null;
     }
     case 'ovo':       return ovosNoChao.length ? ovosNoChao[0].node.position : null;
+    case 'fruta':     return frutasNoChao.length ? frutasNoChao[0].node.position : null;
     case 'camisa':    return camisaMesh ? camisaMesh.position : null;
     default: return null;
   }
@@ -2126,6 +2377,7 @@ function aoTocar(cx, cy) {
       if (d.tipo === 'camisa') { acharCamisa(); return; }
       if (d.tipo === 'cocho') { encherCocho(); return; }
       if (d.tipo === 'ovo') { pegarOvo(o); return; }
+      if (d.tipo === 'fruta') { colherFruta(o); return; }
       o = o.parent;
     }
   }
@@ -2283,6 +2535,7 @@ function tick() {
 
   // IA dos bichos: passeiam sozinhos e vêm ao cocho quando tem comida
   atualizarIA(dt, t);
+  atualizarFrutas(dt, t);
 
   // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
   // ser recolhido — em vez de virar só um número no HUD.
