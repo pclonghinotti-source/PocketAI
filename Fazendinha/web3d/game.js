@@ -2736,6 +2736,7 @@ const miraCam = new THREE.Vector3(0, 1.15, 4.5);
 const DIST_CAM = 7.4;
 const ALT_CAM = 4.1;
 const ALTURA_MIRA_EXTRA = 1.5;
+let camPosicionada = false;   // evita a interpolação a partir da origem
 
 function tick() {
   const dt = Math.min(relogio.getDelta(), 0.05);
@@ -2902,12 +2903,28 @@ function tick() {
   const foco = naCasa ? entradaCeleiro : corpoAtor.position;
   const distFoco = naCasa ? 8.2 : ator.dist;
 
+  // A vista padrão é atrás do personagem. Girar com o dedo é permitido,
+  // mas assim que ele volta a andar a câmera retorna para trás — senão
+  // se caminha de lado sem enxergar para onde vai.
+  if (andando && !pressionado && Math.abs(orbita) > 0.001) {
+    orbita += (0 - orbita) * Math.min(1, dt * 1.8);
+    if (Math.abs(orbita) < 0.01) orbita = 0;
+  }
+
   const ang = corpoAtor.rotation.y + orbita;
   alvoCam.set(
     foco.x - Math.sin(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco,
     naCasa ? 4.8 : ALT_CAM,
     foco.z - Math.cos(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco
   );
+  // No primeiro quadro a câmera é colocada direto no lugar. Interpolar a
+  // partir da origem fazia o jogo abrir com a câmera atravessando o
+  // cenário até se acomodar atrás do personagem.
+  if (!camPosicionada) {
+    camera.position.copy(alvoCam);
+    miraCam.set(foco.x, (naCasa ? 1.4 : ator.alturaCam) + ALTURA_MIRA_EXTRA, foco.z);
+    camPosicionada = true;
+  }
   camera.position.lerp(alvoCam, 1 - Math.pow(0.0015, dt));
   miraCam.lerp(
     new THREE.Vector3(
@@ -2942,6 +2959,8 @@ window.__jogo = {
   camera, renderer, tick,
   entradaCeleiro, portasCeleiro, casa, entrarNaCasa: pedirEntrarNaCasa, sairDaCasa,
   get atorAtivo() { return atorAtivo; },
+  get orbita() { return orbita; },
+  irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
 
 cena.add(sol.target);
