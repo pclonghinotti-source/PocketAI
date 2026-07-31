@@ -2584,6 +2584,80 @@ function responder(quem, frase) {
   return { texto: opcoes[Math.floor(Math.random() * opcoes.length)], timbre: p.timbre, nome: p.nome };
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Pedidos dos bichinhos
+// ══════════════════════════════════════════════════════════════
+// O que faz o bichinho parecer esperto não é vocabulário: é ter vontade
+// própria, lembrar do que pediu e reagir a ter sido atendido. Cada um
+// pede uma coisa, cobra se ela demora e agradece quando ela faz.
+
+const PEDIDOS = {
+  galinha: [
+    { id: 'comida', evento: 'alimentou',   pede: 'Có có! Tô com fominha… põe milho no cocho pra mim?', cobra: 'Có! Você esqueceu do meu milho…', agradece: 'Cocóóó! Que delícia! Obrigada! 💛', premio: 3 },
+    { id: 'carinho', evento: 'carinho',    pede: 'Có! Faz um cafuné na minha peninha?',                cobra: 'Có… cadê meu cafuné?',            agradece: 'Có có! Que gostoso! 💕', premio: 2 },
+  ],
+  vaca: [
+    { id: 'comida', evento: 'alimentou',   pede: 'Muuu… tô com fome. Enche o cocho pra mim?',          cobra: 'Muuu… ainda tô com fome…',        agradece: 'Muuuu! Obrigada, amiguinha! 💗', premio: 3 },
+    { id: 'planta', evento: 'colheu',      pede: 'Muu! Colhe uma plantinha pra eu ver?',               cobra: 'Muu? Cadê a plantinha?',          agradece: 'Muuu! Que plantinha linda! 🌱', premio: 3 },
+  ],
+  ovelha: [
+    { id: 'carinho', evento: 'carinho',    pede: 'Bééé! Você faz carinho na minha lã?',                cobra: 'Béé… tô esperando o carinho…',    agradece: 'Bééé! Que delícia! 💕', premio: 2 },
+    { id: 'fruta',  evento: 'colheuFruta', pede: 'Béé! Pega uma frutinha que caiu pra mim?',           cobra: 'Bééé? E a frutinha?',             agradece: 'Béé béé! Obrigada! 🍎', premio: 3 },
+  ],
+  porco: [
+    { id: 'comida', evento: 'alimentou',   pede: 'OINC! Eu quero comer! Enche o cocho!',               cobra: 'Oinc… meu pote tá vazio…',        agradece: 'OINC OINC! Que banquete! 🍽️', premio: 3 },
+    { id: 'fruta',  evento: 'colheuFruta', pede: 'Oinc! Me traz uma frutinha do chão?',                cobra: 'Oinc? Cadê minha frutinha?',      agradece: 'Oinc oinc! Delícia! 🍎', premio: 3 },
+  ],
+  nenao: [
+    { id: 'fruta',  evento: 'colheuFruta', pede: 'Urso gosta de fruta… pega uma pra mim? 🍎',          cobra: 'Hmmm… cadê minha frutinha?',      agradece: 'Ahhh! Obrigado! Urso feliz! 🐻', premio: 4 },
+    { id: 'planta', evento: 'colheu',      pede: 'Você colhe uma plantinha pra mostrar pro Nenão?',    cobra: 'Ainda quero ver a plantinha…',    agradece: 'Que plantinha bonita! Você é demais! 🌻', premio: 4 },
+  ],
+  cachorro: [
+    { id: 'carinho', evento: 'carinho',    pede: 'Au au! Faz carinho em algum bichinho? Eu quero ver!', cobra: 'Au? Cadê o carinho?',            agradece: 'AU AU! Você é boazinha! 🐶', premio: 3 },
+    { id: 'ovo',    evento: 'pegouOvo',    pede: 'Au! Acha um ovinho no chão pra mim?',                cobra: 'Au au! E o ovinho?',              agradece: 'Au au au! Achou! Que esperta! 🥚', premio: 4 },
+  ],
+};
+
+// pedido em aberto por bichinho: { def, feitoEm }
+const pedidosAtivos = {};
+
+/** Sorteia um pedido para o bicho, evitando repetir o último. */
+function novoPedido(quem) {
+  const lista = PEDIDOS[quem];
+  if (!lista) return null;
+  const anterior = pedidosAtivos[quem]?.def?.id;
+  const opcoes = lista.filter(p => p.id !== anterior);
+  const def = (opcoes.length ? opcoes : lista)[Math.floor(Math.random() * (opcoes.length || lista.length))];
+  pedidosAtivos[quem] = { def, cobrado: 0 };
+  return def;
+}
+
+/**
+ * Chamado a cada ação da criança. Quem estava esperando aquilo agradece
+ * e paga a recompensa — é o que dá a sensação de que ele percebeu.
+ */
+function verificarPedidos(evento) {
+  for (const [quem, ativo] of Object.entries(pedidosAtivos)) {
+    if (!ativo || ativo.def.evento !== evento) continue;
+    const p = PERSONAS[quem];
+    estado.estrelas += ativo.def.premio;
+    estado.pedidosFeitos = (estado.pedidosFeitos || 0) + 1;
+    estado.amizade = estado.amizade || {};
+    estado.amizade[quem] = (estado.amizade[quem] || 0) + 1;
+    pedidosAtivos[quem] = null;
+    salvar(); atualizarHUD();
+    falar(`${p.nome}: ${ativo.def.agradece}`, 3200, p.timbre);
+    return true;   // um agradecimento por vez, senão viram todos falando junto
+  }
+  return false;
+}
+
+/** Nível de amizade muda o jeito de cumprimentar. */
+function nivelAmizade(quem) {
+  const n = (estado.amizade && estado.amizade[quem]) || 0;
+  return n >= 5 ? 'melhorAmigo' : n >= 2 ? 'amigo' : 'novo';
+}
+
 // Convites: o bichinho puxa assunto para a criança ter o que responder.
 // Terminam em pergunta de propósito — pergunta convida resposta.
 const CONVITES = {
@@ -2607,25 +2681,82 @@ let ouvindo = false;
 let rodadasDeConversa = 0;
 const MAX_RODADAS = 4;
 
-/** Responde ao que ela falou e reabre o microfone para ela continuar. */
+/**
+ * Responde ao que ela falou e reabre o microfone para ela continuar.
+ * Antes da resposta genérica, checa o contexto: um bicho que acabou de
+ * pedir comida deve falar da comida, não dar uma resposta qualquer.
+ */
 function conversarCom(quem, frase) {
-  const r = responder(quem, frase);
   rodadasDeConversa++;
   const continua = rodadasDeConversa < MAX_RODADAS;
+  const p = PERSONAS[quem] || PERSONAS.manu;
+  const texto = normalizar(frase);
+  const ativo = pedidosAtivos[quem];
+
+  let resposta = null;
+
+  // "sim/quero" com pedido em aberto = ela topou. Repetir o pedido
+  // inteiro soaria robótico; melhor confirmar e ficar esperando.
+  if (ativo && ativo.def && /\b(sim|claro|quero|vamos|bora|isso|uhum|ta bom|pode deixar)\b/.test(texto)) {
+    const confirmacoes = [
+      'Oba! Vou esperar bem aqui! 😊',
+      'Que bom! Obrigado, viu?',
+      'Ebaaa! Você é a melhor!',
+      'Oba! Tô contando com você!',
+    ];
+    resposta = confirmacoes[Math.floor(Math.random() * confirmacoes.length)];
+  }
+  // pergunta sobre fome quando o cocho está vazio
+  else if (/\b(fome|comida|comer)\b/.test(texto) && cochoRacao && !cochoRacao.visible) {
+    resposta = 'Tô com fominha sim! O cocho tá vazio…';
+  }
+  // ela pergunta o que fazer e há pedido pendente
+  else if (/\b(ajuda|o que faz|o que fazer|nao sei)\b/.test(texto) && ativo && ativo.def) {
+    resposta = ativo.def.pede;
+  }
+
+  if (resposta) {
+    falar(`${p.nome}: ${resposta}`, 3600, p.timbre, continua ? () => ouvir() : null);
+    return;
+  }
+
+  const r = responder(quem, frase);
   falar(`${r.nome}: ${r.texto}`, 3400, r.timbre, continua ? () => ouvir() : null);
 }
 
 /**
  * Toque no bichinho: ele fala primeiro e só então abre o microfone.
  * Abrir junto com a fala faria o jogo ouvir a própria voz.
+ *
+ * O que ele diz depende do momento: se já pediu algo e ainda não foi
+ * atendido, cobra; senão faz um pedido novo de vez em quando; e o
+ * cumprimento muda conforme a amizade.
  */
 function puxarConversa(quem) {
   interlocutor = quem;
   rodadasDeConversa = 0;
   const p = PERSONAS[quem] || PERSONAS.manu;
-  const lista = CONVITES[quem] || CONVITES.manu;
-  const convite = lista[Math.floor(Math.random() * lista.length)];
-  falar(`${p.nome}: ${convite}`, 3600, p.timbre, () => ouvir());
+  const ativo = pedidosAtivos[quem];
+  let fala;
+
+  if (ativo && ativo.def) {
+    // já tem pedido em aberto: cobra, mas com jeitinho
+    ativo.cobrado++;
+    fala = ativo.cobrado > 1 ? ativo.def.cobra : ativo.def.pede;
+  } else if (PEDIDOS[quem] && Math.random() < 0.65) {
+    const def = novoPedido(quem);
+    fala = def ? def.pede : null;
+  }
+
+  if (!fala) {
+    const nivel = nivelAmizade(quem);
+    const lista = CONVITES[quem] || CONVITES.manu;
+    fala = lista[Math.floor(Math.random() * lista.length)];
+    if (nivel === 'melhorAmigo') fala = `Você é minha melhor amiga! ${fala}`;
+    else if (nivel === 'amigo') fala = `Que bom que você voltou! ${fala}`;
+  }
+
+  falar(`${p.nome}: ${fala}`, 4000, p.timbre, () => ouvir());
 }
 
 // ── Voz ───────────────────────────────────────────────────────
@@ -3000,6 +3131,9 @@ function acharCamisa() {
 }
 
 function avancar(evento) {
+  // quem estava esperando essa ação agradece antes de tudo
+  verificarPedidos(evento);
+
   const m = MISSOES[estado.missao];
   if (!m || m.evento !== evento) return;
   estado.progresso++;
@@ -3370,6 +3504,7 @@ window.__jogo = {
   get atorAtivo() { return atorAtivo; },
   get orbita() { return orbita; },
   conversarCom, responder, PERSONAS, puxarConversa, CONVITES,
+  PEDIDOS, pedidosAtivos, verificarPedidos, nivelAmizade,
   get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
