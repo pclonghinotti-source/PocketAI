@@ -96,6 +96,8 @@ const estado = {
 const cena = new THREE.Scene();
 cena.background = new THREE.Color(PALETA.ceu);
 cena.fog = new THREE.Fog(PALETA.ceuBaixo, 38, 78);
+// guardada para restaurar ao sair do celeiro, onde a névoa é desligada
+const nevoaOriginal = cena.fog;
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 200);
 
@@ -1038,6 +1040,15 @@ const LIMITE = { minX: -27, maxX: 27, minZ: -27, maxZ: 19 };
 /** Ajusta um deslocamento para não entrar em nenhum obstáculo. */
 function resolverColisao(px, pz, nx, nz, raioCorpo) {
   let x = nx, z = nz;
+
+  // dentro do celeiro valem as paredes do cômodo, não o cercado da fazenda
+  if (typeof casa !== 'undefined' && casa.fase === 'dentro') {
+    return {
+      x: Math.max(INTERIOR_CENTRO.x + LIMITE_INTERIOR.minX, Math.min(INTERIOR_CENTRO.x + LIMITE_INTERIOR.maxX, x)),
+      z: Math.max(INTERIOR_CENTRO.z + LIMITE_INTERIOR.minZ, Math.min(INTERIOR_CENTRO.z + LIMITE_INTERIOR.maxZ, z)),
+    };
+  }
+
   for (const o of obstaculos) {
     const dx = x - o.x, dz = z - o.z;
     const alcance = o.r + raioCorpo;
@@ -2200,6 +2211,153 @@ function porOvoNoChao(x, z) {
   return g;
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Interior do celeiro
+// ══════════════════════════════════════════════════════════════
+// Construído longe do mapa, não dentro da casinha: assim o cômodo pode
+// ser maior e mais aconchegante que a caixa vista de fora, sem que as
+// paredes de lá apareçam aqui.
+const INTERIOR_CENTRO = new THREE.Vector3(0, -60, 0);
+const interiorCeleiro = new THREE.Group();
+const LIMITE_INTERIOR = { minX: -5.2, maxX: 5.2, minZ: -4.0, maxZ: 4.2 };
+{
+  const mTabua = new THREE.MeshStandardMaterial({ map: TEX_MADEIRA, roughness: 0.94 });
+  const mParede = new THREE.MeshStandardMaterial({ map: TEX_CELEIRO, roughness: 0.95 });
+  const mPalha = mat(0xd9b44a, { roughness: 0.98 });
+
+  // piso de tábuas
+  const piso = caixa(12, 0.2, 10, mTabua);
+  piso.position.y = -0.1;
+  piso.receiveShadow = true;
+  interiorCeleiro.add(piso);
+
+  // paredes e teto
+  for (const [x, z, l, p] of [[0, -5, 12, 0.3], [-6, 0, 0.3, 10], [6, 0, 0.3, 10]]) {
+    const par = caixa(l, 4.2, p, mParede);
+    par.position.set(x, 2.1, z);
+    interiorCeleiro.add(par);
+  }
+  const teto = caixa(12, 0.3, 10, mat(0x5c3a22, { roughness: 0.95 }));
+  teto.position.y = 4.2;
+  interiorCeleiro.add(teto);
+  // vigas do telhado
+  for (let i = -2; i <= 2; i++) {
+    const viga = caixa(12, 0.22, 0.22, mat(0x6b4526, { roughness: 0.9 }));
+    viga.position.set(0, 3.9, i * 2);
+    interiorCeleiro.add(viga);
+  }
+
+  // porta de saída, na parede da frente
+  const vaoLuz = caixa(1.6, 2.2, 0.12, mat(0xffe9b0, { roughness: 0.5 }));
+  vaoLuz.position.set(0, 1.1, 4.9);
+  interiorCeleiro.add(vaoLuz);
+
+  // fardos de feno empilhados
+  for (const [x, y, z, rot] of [[-4.2, 0.35, -3.6, 0.2], [-4.2, 1.05, -3.6, -0.15],
+                                [-3.3, 0.35, -3.8, 0.5], [4.3, 0.35, -3.5, -0.3]]) {
+    const fardo = cilindro(0.36, 0.36, 0.66, mPalha, 14);
+    fardo.rotation.z = Math.PI / 2;
+    fardo.rotation.y = rot;
+    fardo.position.set(x, y, z);
+    interiorCeleiro.add(fardo);
+    // cordas do fardo
+    for (const off of [-0.16, 0.16]) {
+      const corda = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.022, 6, 18), mat(0x8a6a2a, { roughness: 0.9 }));
+      corda.position.set(x + off, y, z);
+      corda.rotation.y = Math.PI / 2;
+      corda.rotation.x = rot;
+      interiorCeleiro.add(corda);
+    }
+  }
+  // palha solta no chão
+  for (let i = 0; i < 40; i++) {
+    const p = caixa(0.22 + Math.random() * 0.2, 0.02, 0.03, mPalha);
+    p.position.set((Math.random() - 0.5) * 9, 0.01, (Math.random() - 0.5) * 7.5);
+    p.rotation.y = Math.random() * Math.PI;
+    interiorCeleiro.add(p);
+  }
+
+  // bancada com ferramentas na parede do fundo
+  const bancada = caixa(3.4, 0.16, 0.8, mTabua);
+  bancada.position.set(1.6, 0.95, -4.4);
+  interiorCeleiro.add(bancada);
+  for (const px of [0.2, 3.0]) {
+    const pe = caixa(0.14, 0.95, 0.7, mTabua);
+    pe.position.set(px, 0.47, -4.4);
+    interiorCeleiro.add(pe);
+  }
+  // pá, ancinho e forcado pendurados
+  const ferramentas = [
+    { x: -1.0, cabo: 0x9c6b3f, ponta: 0xb9bcc4, forma: 'pa' },
+    { x: -2.0, cabo: 0x9c6b3f, ponta: 0xb9bcc4, forma: 'ancinho' },
+    { x: -3.0, cabo: 0x9c6b3f, ponta: 0xb9bcc4, forma: 'forcado' },
+  ];
+  for (const f of ferramentas) {
+    const cabo = cilindro(0.035, 0.035, 1.7, mat(f.cabo, { roughness: 0.9 }), 8);
+    cabo.position.set(f.x, 1.9, -4.72);
+    interiorCeleiro.add(cabo);
+    if (f.forma === 'pa') {
+      const pa = caixa(0.3, 0.36, 0.04, mat(f.ponta, { roughness: 0.4, metalness: 0.5 }));
+      pa.position.set(f.x, 1.0, -4.72);
+      interiorCeleiro.add(pa);
+    } else {
+      const trav = caixa(0.42, 0.05, 0.05, mat(f.ponta, { roughness: 0.4, metalness: 0.5 }));
+      trav.position.set(f.x, 1.12, -4.72);
+      interiorCeleiro.add(trav);
+      const dentes = f.forma === 'ancinho' ? 5 : 3;
+      for (let d = 0; d < dentes; d++) {
+        const dente = cilindro(0.02, 0.02, 0.26, mat(f.ponta, { roughness: 0.4, metalness: 0.5 }), 6);
+        dente.position.set(f.x - 0.18 + d * (0.36 / (dentes - 1)), 0.99, -4.72);
+        interiorCeleiro.add(dente);
+      }
+    }
+  }
+
+  // baú da colheita: guarda o que ela juntou
+  const bau = new THREE.Group();
+  const corpoBau = caixa(1.3, 0.7, 0.85, mTabua);
+  corpoBau.position.y = 0.35;
+  bau.add(corpoBau);
+  const tampa = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.44, 0.44, 1.3, 16, 1, false, 0, Math.PI),
+    mat(0x8a5a2b, { roughness: 0.9 })
+  );
+  tampa.rotation.z = Math.PI / 2;
+  tampa.position.y = 0.7;
+  bau.add(tampa);
+  for (const px of [-0.5, 0.5]) {
+    const cinta = caixa(0.09, 0.74, 0.88, mat(0x6b4526, { roughness: 0.7, metalness: 0.3 }));
+    cinta.position.set(px, 0.36, 0);
+    bau.add(cinta);
+  }
+  const fecho = esfera(0.07, mat(0xd9b44a, { roughness: 0.35, metalness: 0.6 }), 0.8);
+  fecho.position.set(0, 0.62, 0.44);
+  bau.add(fecho);
+  bau.position.set(-2.6, 0, 2.4);
+  bau.userData = { tipo: 'bau' };
+  interiorCeleiro.add(bau);
+
+  // lampião pendurado, dá o aconchego
+  const lampiao = new THREE.Group();
+  const vidro = esfera(0.16, new THREE.MeshBasicMaterial({ color: 0xffdf8a }), 1.2);
+  lampiao.add(vidro);
+  const alca = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.015, 6, 12), mat(0x5a5a5a, { roughness: 0.5 }));
+  alca.position.y = 0.2;
+  lampiao.add(alca);
+  lampiao.position.set(2.4, 3.1, 1.0);
+  interiorCeleiro.add(lampiao);
+  const luzLampiao = new THREE.PointLight(0xffcf6a, 12, 9, 2);
+  luzLampiao.position.set(2.4, 3.0, 1.0);
+  interiorCeleiro.add(luzLampiao);
+
+  // luz geral suave, senão o cômodo fica escuro demais
+  interiorCeleiro.add(new THREE.HemisphereLight(0xffe0b0, 0x6b4526, 1.5));
+
+  interiorCeleiro.position.copy(INTERIOR_CENTRO);
+  interiorCeleiro.visible = false;
+  cena.add(interiorCeleiro);
+}
+
 // ── Entrar e sair do celeiro ──────────────────────────────────
 // A porta só abre quando o personagem chega perto; ele então caminha
 // para dentro e some. Fica lá até o jogador mandar sair — nada de timer,
@@ -2210,6 +2368,17 @@ const casa = {
   portasAlvo: 0,         // 0 fechadas, 1 abertas
   t: 0,
 };
+
+/** Baú: mostra o que ela já juntou, sem tirar nada dela. */
+function abrirBau() {
+  const c = estado.cesta || 0;
+  const e = estado.estrelas || 0;
+  if (c === 0) {
+    falar('O baú tá vazio! Colhe umas plantinhas pra guardar 🧺', 3400);
+    return;
+  }
+  falar(`No meu baú tem ${c} colheita${c > 1 ? 's' : ''} e ${e} estrelinha${e > 1 ? 's' : ''}! 🧺✨`, 4000);
+}
 
 function pedirEntrarNaCasa() {
   if (casa.fase !== 'fora') return;
@@ -2246,19 +2415,32 @@ function atualizarCasa(dt) {
     case 'entrando': {
       casa.t += dt;
       casa.portasAlvo = 1;
-      // anda para dentro e vai sumindo
-      const p = Math.min(casa.t / 1.1, 1);
+      // caminha para dentro do vão e some atrás da porta
+      const p = Math.min(casa.t / 1.0, 1);
       node.position.x = entradaCeleiro.x + (CELEIRO_POS.x - entradaCeleiro.x) * p;
       node.position.z = entradaCeleiro.z + (CELEIRO_POS.z - entradaCeleiro.z) * p;
       node.rotation.y = Math.atan2(CELEIRO_POS.x - entradaCeleiro.x, CELEIRO_POS.z - entradaCeleiro.z);
-      node.scale.setScalar(1 - p * 0.35);
+      node.scale.setScalar(1 - p * 0.3);
       if (p >= 1) {
-        node.visible = false;
+        // aparece de verdade no cômodo, junto à porta interna
         node.scale.setScalar(1);
+        // mais para o meio do cômodo: colada na porta, a câmera de trás
+        // atravessaria a parede dos fundos
+        node.position.set(INTERIOR_CENTRO.x, INTERIOR_CENTRO.y, INTERIOR_CENTRO.z + 0.8);
+        node.rotation.y = 0;
+        interiorCeleiro.visible = true;
+        // o mundo continua visível: os personagens vivem nele, e esconder
+        // tudo escondia também quem entrou. O cômodo fica 60 unidades
+        // abaixo, então o campo não aparece no enquadramento.
+        cena.fog = null;               // névoa de campo aberto não cabe aqui
+        cena.background = new THREE.Color(0x2a1c12);
         casa.fase = 'dentro';
         casa.portasAlvo = 0;
+        // corte seco de câmera: interpolar 60 unidades faria ela voar
+        // atravessando o mundo até chegar no cômodo
+        camPosicionada = false;
         el('sairCasa').style.display = 'flex';
-        falar('Estou dentro do celeiro! 🏠', 2600);
+        falar('Olha o celeiro por dentro! 🏠', 3000);
       }
       break;
     }
@@ -2267,20 +2449,28 @@ function atualizarCasa(dt) {
       break;
     case 'saindo': {
       casa.t += dt;
-      // espera a porta abrir antes de aparecer
+      if (casa.t > 0.35 && interiorCeleiro.visible) {
+        // volta ao mundo, saindo pela porta
+        interiorCeleiro.visible = false;
+        cena.fog = nevoaOriginal;
+        cena.background = new THREE.Color(PALETA.ceu);
+        node.position.set(CELEIRO_POS.x, 0, CELEIRO_POS.z);
+        node.scale.setScalar(0.7);
+        camPosicionada = false;   // corta de volta para o campo
+      }
       if (casa.t > 0.45) {
         node.visible = true;
         const p = Math.min((casa.t - 0.45) / 1.0, 1);
         node.position.x = CELEIRO_POS.x + (entradaCeleiro.x - CELEIRO_POS.x) * p;
         node.position.z = CELEIRO_POS.z + (entradaCeleiro.z - CELEIRO_POS.z) * p;
         node.rotation.y = Math.atan2(entradaCeleiro.x - CELEIRO_POS.x, entradaCeleiro.z - CELEIRO_POS.z);
-        node.scale.setScalar(0.65 + p * 0.35);
+        node.scale.setScalar(0.7 + p * 0.3);
         if (p >= 1) {
           node.scale.setScalar(1);
           casa.fase = 'fora';
           casa.quem = null;
           casa.portasAlvo = 0;
-          falar('Voltei! ☀️', 2000);
+          falar('Voltei pro sol! ☀️', 2200);
         }
       }
       break;
@@ -3649,11 +3839,29 @@ const ponteiro = new THREE.Vector2();
 let destino = null;
 
 function aoTocar(cx, cy) {
-  // dentro do celeiro ou no meio da animação, o mundo não responde
-  if (casa.fase === 'entrando' || casa.fase === 'dentro' || casa.fase === 'saindo') return;
+  // durante as transições o toque não vale; dentro do celeiro ele vale,
+  // mas sobre o cômodo, não sobre o mundo lá fora
+  if (casa.fase === 'entrando' || casa.fase === 'saindo') return;
   ponteiro.x = (cx / innerWidth) * 2 - 1;
   ponteiro.y = -(cy / innerHeight) * 2 + 1;
   raycaster.setFromCamera(ponteiro, camera);
+
+  if (casa.fase === 'dentro') {
+    const dentroHits = raycaster.intersectObjects(interiorCeleiro.children, true);
+    if (!dentroHits.length) return;
+    for (const h of dentroHits) {
+      let o = h.object;
+      while (o && o !== interiorCeleiro) {
+        if (o.userData?.tipo === 'bau') { abrirBau(); return; }
+        o = o.parent;
+      }
+    }
+    // senão, anda até o ponto tocado do piso
+    const piso = dentroHits.find(h => h.object.geometry?.type === 'BoxGeometry' && h.point.y < 0.4);
+    if (piso) destino = new THREE.Vector3(piso.point.x, INTERIOR_CENTRO.y, piso.point.z);
+    return;
+  }
+
   const hits = raycaster.intersectObjects(mundo.children, true);
   if (!hits.length) return;
 
@@ -3798,7 +4006,10 @@ function tick() {
   // `bobY`; a altura final é terreno + salto, senão o personagem afunda
   // ao sair da parte plana do mapa.
   for (const a of ATORES) {
-    a.node.position.y = alturaTerreno(a.node.position.x, a.node.position.z) + (a.bobY || 0);
+    // no celeiro o piso é plano e fica lá embaixo, fora do relevo do campo
+    const base = (casa.fase === 'dentro' && a === ator) ? INTERIOR_CENTRO.y
+               : alturaTerreno(a.node.position.x, a.node.position.z);
+    a.node.position.y = base + (a.bobY || 0);
   }
   for (const b of animaisMesh) {
     b.grupo.position.y = alturaTerreno(b.grupo.position.x, b.grupo.position.z);
@@ -3941,9 +4152,13 @@ function tick() {
   // chega mais perto; o urso é largo e pede mais recuo.
   // Com o personagem escondido dentro do celeiro, seguir a posição dele
   // colocaria a câmera dentro da parede — então ela olha a fachada.
-  const naCasa = casa.fase === 'dentro' || casa.fase === 'entrando' || casa.fase === 'saindo';
-  const foco = naCasa ? entradaCeleiro : corpoAtor.position;
-  const distFoco = naCasa ? 8.2 : ator.dist;
+  // 'dentro' segue o personagem normalmente — ele está no cômodo. Só nas
+  // transições a câmera fica na fachada, porque ali ele some atrás da porta.
+  const naTransicao = casa.fase === 'entrando' || casa.fase === 'saindo';
+  const foco = naTransicao ? entradaCeleiro : corpoAtor.position;
+  // no cômodo a câmera fica perto e mais alta, olhando de cima para não
+  // furar as paredes, que são bem mais próximas que no campo aberto
+  const distFoco = naTransicao ? 8.2 : (casa.fase === 'dentro' ? 3.6 : ator.dist);
 
   // A vista padrão é atrás do personagem. Girar com o dedo é permitido,
   // mas assim que ele volta a andar a câmera retorna para trás — senão
@@ -3953,25 +4168,26 @@ function tick() {
     if (Math.abs(orbita) < 0.01) orbita = 0;
   }
 
+  const dentro = casa.fase === 'dentro';
   const ang = corpoAtor.rotation.y + orbita;
   alvoCam.set(
-    foco.x - Math.sin(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco,
-    naCasa ? 4.8 : ALT_CAM,
-    foco.z - Math.cos(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco
+    foco.x - Math.sin(naTransicao ? CELEIRO_ROT + Math.PI : ang) * distFoco,
+    naTransicao ? 4.8 : (dentro ? foco.y + 2.9 : ALT_CAM),
+    foco.z - Math.cos(naTransicao ? CELEIRO_ROT + Math.PI : ang) * distFoco
   );
   // No primeiro quadro a câmera é colocada direto no lugar. Interpolar a
   // partir da origem fazia o jogo abrir com a câmera atravessando o
   // cenário até se acomodar atrás do personagem.
   if (!camPosicionada) {
     camera.position.copy(alvoCam);
-    miraCam.set(foco.x, (naCasa ? 1.4 : ator.alturaCam) + ALTURA_MIRA_EXTRA, foco.z);
+    miraCam.set(foco.x, (naTransicao ? 1.4 : foco.y + ator.alturaCam) + (dentro ? 0.2 : ALTURA_MIRA_EXTRA), foco.z);
     camPosicionada = true;
   }
   camera.position.lerp(alvoCam, 1 - Math.pow(0.0015, dt));
   miraCam.lerp(
     new THREE.Vector3(
       foco.x,
-      (naCasa ? 1.4 : corpoAtor.position.y + ator.alturaCam) + ALTURA_MIRA_EXTRA,
+      (naTransicao ? 1.4 : corpoAtor.position.y + ator.alturaCam) + (dentro ? 0.2 : ALTURA_MIRA_EXTRA),
       foco.z
     ),
     1 - Math.pow(0.002, dt)
