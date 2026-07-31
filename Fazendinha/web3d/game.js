@@ -347,8 +347,48 @@ function texturaCasca(base, px = 256) {
   return tex;
 }
 
+/** Tábuas: ripas verticais com veio e frestas escuras entre elas. */
+function texturaTabuas(base, escuro, claro, { ripas = 9, px = 512 } = {}) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = px;
+  const c = cv.getContext('2d');
+  const larg = px / ripas;
+
+  for (let i = 0; i < ripas; i++) {
+    // cada ripa com tom levemente diferente, como madeira de verdade
+    const t = (Math.random() - 0.5) * 0.35;
+    c.fillStyle = misturar(base, t > 0 ? claro : escuro, Math.abs(t));
+    c.fillRect(i * larg, 0, larg, px);
+
+    // veio da madeira
+    c.globalAlpha = 0.16;
+    for (let v = 0; v < 9; v++) {
+      const x = i * larg + Math.random() * larg;
+      c.strokeStyle = misturar(base, escuro, 0.5 + Math.random() * 0.4);
+      c.lineWidth = px / 420;
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.bezierCurveTo(x + (Math.random() - 0.5) * 8, px * 0.4, x + (Math.random() - 0.5) * 8, px * 0.7, x, px);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
+
+    // fresta entre ripas
+    c.fillStyle = misturar(base, escuro, 0.75);
+    c.fillRect(i * larg, 0, Math.max(1.5, px / 300), px);
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 // criadas uma vez e reaproveitadas em toda a cena
 const TEX_GRAMA = texturaGrama();
+const TEX_CELEIRO = texturaTabuas(PALETA.celeiro, 0x8f1f16, 0xf05a4a);
+const TEX_TELHADO = texturaTabuas(PALETA.telhado, 0x4d1c10, 0xb45a3c, { ripas: 16 });
+const TEX_MADEIRA = texturaTabuas(PALETA.madeira, 0x7a4a1e, 0xe0a566, { ripas: 6 });
 const TEX_FOLHA = texturaFolhagem(PALETA.folha, 0x2f6b22, 0x8ed14e);
 const TEX_FOLHA_CLARA = texturaFolhagem(PALETA.folhaClara, 0x3d8a2a, 0xa8de63);
 const TEX_CASCA = texturaCasca(PALETA.tronco);
@@ -470,11 +510,35 @@ for (const [x, y, z, s] of [
 ]) criarNuvem(x, y, z, s);
 
 // ── Celeiro ───────────────────────────────────────────────────
+let portasCeleiro = [];          // as duas folhas, para abrir e fechar
+const CELEIRO_POS = new THREE.Vector3(-7.5, 0, -5.5);
+const CELEIRO_ROT = 0.35;
+let entradaCeleiro = null;       // ponto na frente da porta, no mundo
 {
   const celeiro = new THREE.Group();
-  const corpo = caixa(3.4, 2.3, 2.6, mat(PALETA.celeiro));
+  const matParede = new THREE.MeshStandardMaterial({ map: TEX_CELEIRO, roughness: 0.9 });
+  const matTelha = new THREE.MeshStandardMaterial({ map: TEX_TELHADO, roughness: 0.92 });
+  const matMad = new THREE.MeshStandardMaterial({ map: TEX_MADEIRA, roughness: 0.9 });
+  const matBranco = mat(0xf4efe4, { roughness: 0.75 });
+
+  const corpo = caixa(3.4, 2.3, 2.6, matParede);
   corpo.position.y = 1.15;
   celeiro.add(corpo);
+
+  // cantoneiras brancas, marca registrada de celeiro americano
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const canto = caixa(0.14, 2.3, 0.14, matBranco);
+      canto.position.set(sx * 1.7, 1.15, sz * 1.3);
+      celeiro.add(canto);
+    }
+  }
+  // faixa de acabamento no topo da parede
+  for (const sz of [-1, 1]) {
+    const faixa = caixa(3.5, 0.13, 0.06, matBranco);
+    faixa.position.set(0, 2.24, sz * 1.31);
+    celeiro.add(faixa);
+  }
 
   // Telhado de duas águas via prisma extrudado.
   // Corpo: X de -1.7 a 1.7, Z de -1.3 a 1.3, topo em y=2.3.
@@ -489,7 +553,7 @@ for (const [x, y, z, s] of [
   forma.lineTo(-ABA_Z, 0);
   const telhado = new THREE.Mesh(
     new THREE.ExtrudeGeometry(forma, { depth: VAO_X, bevelEnabled: false }),
-    mat(PALETA.telhado)
+    matTelha
   );
   telhado.rotation.y = Math.PI / 2;
   telhado.position.set(-VAO_X / 2, 2.3, 0);
@@ -497,14 +561,134 @@ for (const [x, y, z, s] of [
   telhado.receiveShadow = true;
   celeiro.add(telhado);
 
-  const porta = caixa(1.1, 1.5, 0.08, mat(PALETA.madeira));
-  porta.position.set(0, 0.75, 1.32);
-  celeiro.add(porta);
+  // cumeeira e beirais
+  const cumeeira = caixa(VAO_X + 0.1, 0.12, 0.16, matBranco);
+  cumeeira.position.set(0, 3.62, 0);
+  celeiro.add(cumeeira);
+  for (const sz of [-1, 1]) {
+    const beiral = caixa(VAO_X + 0.1, 0.1, 0.12, matBranco);
+    beiral.position.set(0, 2.34, sz * ABA_Z);
+    celeiro.add(beiral);
+  }
 
-  celeiro.position.set(-7.5, 0, -5.5);
-  celeiro.rotation.y = 0.35;
+  // ── Portas duplas que abrem ──
+  // Cada folha pendura num pivô na lateral do vão, então gira pela
+  // dobradiça em vez de rodar no próprio centro.
+  const VAO_PORTA = 1.5, ALT_PORTA = 1.62;
+  portasCeleiro = [];
+  for (const lado of [-1, 1]) {
+    const pivo = new THREE.Group();
+    pivo.position.set(lado * (VAO_PORTA / 2), 0, 1.32);
+
+    const folha = caixa(VAO_PORTA / 2, ALT_PORTA, 0.09, matMad);
+    folha.position.set(-lado * VAO_PORTA / 4, ALT_PORTA / 2, 0);
+    pivo.add(folha);
+
+    // travessas em X, típicas de porta de celeiro
+    for (const inc of [1, -1]) {
+      const diag = caixa(Math.hypot(VAO_PORTA / 2, ALT_PORTA) * 0.94, 0.1, 0.03, matBranco);
+      diag.position.set(-lado * VAO_PORTA / 4, ALT_PORTA / 2, 0.06);
+      diag.rotation.z = inc * Math.atan2(ALT_PORTA, VAO_PORTA / 2);
+      pivo.add(diag);
+    }
+    for (const y of [0.12, ALT_PORTA - 0.12]) {
+      const trav = caixa(VAO_PORTA / 2, 0.1, 0.03, matBranco);
+      trav.position.set(-lado * VAO_PORTA / 4, y, 0.06);
+      pivo.add(trav);
+    }
+    // maçaneta
+    const mac = esfera(0.055, mat(0x3a3a3a, { roughness: 0.35 }));
+    mac.position.set(-lado * (VAO_PORTA / 2 - 0.12), ALT_PORTA / 2, 0.1);
+    pivo.add(mac);
+
+    pivo.userData = { tipo: 'portaCeleiro', lado };
+    celeiro.add(pivo);
+    portasCeleiro.push({ pivo, lado, aberto: 0 });
+  }
+
+  // batente
+  for (const lado of [-1, 1]) {
+    const bat = caixa(0.12, ALT_PORTA + 0.14, 0.16, matBranco);
+    bat.position.set(lado * (VAO_PORTA / 2 + 0.06), (ALT_PORTA + 0.14) / 2, 1.32);
+    celeiro.add(bat);
+  }
+  const verga = caixa(VAO_PORTA + 0.24, 0.14, 0.16, matBranco);
+  verga.position.set(0, ALT_PORTA + 0.14, 1.32);
+  celeiro.add(verga);
+  // vão escuro atrás das portas, para dar sensação de interior
+  const interior = caixa(VAO_PORTA, ALT_PORTA, 0.05, mat(0x241812, { roughness: 1 }));
+  interior.position.set(0, ALT_PORTA / 2, 1.27);
+  celeiro.add(interior);
+
+  // ── Janelas ──
+  for (const sx of [-1, 1]) {
+    const moldura = caixa(0.62, 0.62, 0.08, matBranco);
+    moldura.position.set(sx * 1.05, 1.62, 1.32);
+    celeiro.add(moldura);
+    const vidro = caixa(0.5, 0.5, 0.04, mat(0x7fc6e8, { roughness: 0.18, metalness: 0.25 }));
+    vidro.position.set(sx * 1.05, 1.62, 1.37);
+    celeiro.add(vidro);
+    for (const [w, h] of [[0.5, 0.05], [0.05, 0.5]]) {
+      const cruz = caixa(w, h, 0.03, matBranco);
+      cruz.position.set(sx * 1.05, 1.62, 1.40);
+      celeiro.add(cruz);
+    }
+  }
+
+  // ── Sótão: janelinha redonda no frontão ──
+  const sotao = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), mat(0x241812, { roughness: 1 }));
+  sotao.position.set(0, 2.95, 1.53);
+  celeiro.add(sotao);
+  const aroSotao = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.05, 8, 22), matBranco);
+  aroSotao.position.set(0, 2.95, 1.53);
+  aroSotao.castShadow = true;
+  celeiro.add(aroSotao);
+  // roldana de feno
+  const braco = caixa(0.09, 0.09, 0.5, matMad);
+  braco.position.set(0, 3.45, 1.7);
+  celeiro.add(braco);
+
+  // ── Silo ao lado ──
+  const silo = new THREE.Group();
+  const cilSilo = cilindro(0.75, 0.8, 3.2, mat(0xd9d3c4, { roughness: 0.85 }), 20);
+  cilSilo.position.y = 1.6;
+  silo.add(cilSilo);
+  for (let i = 0; i < 5; i++) {
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(0.79, 0.035, 6, 22), mat(0xa8a294, { roughness: 0.7 }));
+    aro.rotation.x = Math.PI / 2;
+    aro.position.y = 0.5 + i * 0.62;
+    aro.castShadow = true;
+    silo.add(aro);
+  }
+  const cupula = esfera(0.8, matTelha, 0.62);
+  cupula.position.y = 3.2;
+  silo.add(cupula);
+  silo.position.set(2.55, 0, -0.3);
+  celeiro.add(silo);
+
+  // ── Fardos de feno na entrada ──
+  for (const [fx, fz, rot] of [[-2.3, 1.9, 0.3], [-2.75, 1.55, -0.2]]) {
+    const fardo = cilindro(0.32, 0.32, 0.52, mat(0xd9b44a, { roughness: 0.95 }), 14);
+    fardo.rotation.z = Math.PI / 2;
+    fardo.rotation.y = rot;
+    fardo.position.set(fx, 0.32, fz);
+    celeiro.add(fardo);
+  }
+
+  celeiro.position.copy(CELEIRO_POS);
+  celeiro.rotation.y = CELEIRO_ROT;
   mundo.add(celeiro);
+
+  // ponto de parada em frente à porta, já no espaço do mundo
+  entradaCeleiro = new THREE.Vector3(0, 0, 2.5)
+    .applyAxisAngle(new THREE.Vector3(0, 1, 0), CELEIRO_ROT)
+    .add(CELEIRO_POS);
 }
+// o obstáculo do silo é registrado junto com os demais, mais abaixo —
+// `addObstaculo` ainda não existe neste ponto do arquivo
+const SILO_POS = new THREE.Vector3(2.55, 0, -0.3)
+  .applyAxisAngle(new THREE.Vector3(0, 1, 0), CELEIRO_ROT)
+  .add(CELEIRO_POS);
 
 // ── Moinho de vento ───────────────────────────────────────────
 let pasMoinho = null;
@@ -1417,6 +1601,7 @@ for (let i = 0; i < 9; i++) {
 }
 // as colinas são maciças: sem isso dá para caminhar para dentro delas
 for (const [x, z, r] of COLINAS) addObstaculo(x, z, r * 0.62);
+addObstaculo(SILO_POS.x, SILO_POS.z, 0.85);
 
 // ── Elenco jogável ────────────────────────────────────────────
 // Cada um anda a seu jeito: a Manu tem articulações completas, o
@@ -1914,6 +2099,100 @@ function porOvoNoChao(x, z) {
   return g;
 }
 
+// ── Entrar e sair do celeiro ──────────────────────────────────
+// A porta só abre quando o personagem chega perto; ele então caminha
+// para dentro e some. Fica lá até o jogador mandar sair — nada de timer,
+// como pedido.
+const casa = {
+  fase: 'fora',          // fora | indo | entrando | dentro | saindo
+  quem: null,
+  portasAlvo: 0,         // 0 fechadas, 1 abertas
+  t: 0,
+};
+
+function pedirEntrarNaCasa() {
+  if (casa.fase !== 'fora') return;
+  casa.fase = 'indo';
+  casa.quem = atorAtivo;
+  destino = entradaCeleiro.clone();
+  falar('Vou entrar no celeiro! 🚪', 2200);
+}
+
+function sairDaCasa() {
+  if (casa.fase !== 'dentro') return;
+  casa.fase = 'saindo';
+  casa.t = 0;
+  casa.portasAlvo = 1;
+  el('sairCasa').style.display = 'none';
+}
+
+function atualizarCasa(dt) {
+  const ator = ATORES[casa.quem ?? atorAtivo];
+  const node = ator?.node;
+
+  switch (casa.fase) {
+    case 'indo': {
+      if (!node) { casa.fase = 'fora'; break; }
+      const d = Math.hypot(node.position.x - entradaCeleiro.x, node.position.z - entradaCeleiro.z);
+      casa.portasAlvo = d < 3.2 ? 1 : 0;     // abre ao se aproximar
+      if (d < 0.6) {
+        casa.fase = 'entrando';
+        casa.t = 0;
+        destino = null;
+      }
+      break;
+    }
+    case 'entrando': {
+      casa.t += dt;
+      casa.portasAlvo = 1;
+      // anda para dentro e vai sumindo
+      const p = Math.min(casa.t / 1.1, 1);
+      node.position.x = entradaCeleiro.x + (CELEIRO_POS.x - entradaCeleiro.x) * p;
+      node.position.z = entradaCeleiro.z + (CELEIRO_POS.z - entradaCeleiro.z) * p;
+      node.rotation.y = Math.atan2(CELEIRO_POS.x - entradaCeleiro.x, CELEIRO_POS.z - entradaCeleiro.z);
+      node.scale.setScalar(1 - p * 0.35);
+      if (p >= 1) {
+        node.visible = false;
+        node.scale.setScalar(1);
+        casa.fase = 'dentro';
+        casa.portasAlvo = 0;
+        el('sairCasa').style.display = 'flex';
+        falar('Estou dentro do celeiro! 🏠', 2600);
+      }
+      break;
+    }
+    case 'dentro':
+      casa.portasAlvo = 0;
+      break;
+    case 'saindo': {
+      casa.t += dt;
+      // espera a porta abrir antes de aparecer
+      if (casa.t > 0.45) {
+        node.visible = true;
+        const p = Math.min((casa.t - 0.45) / 1.0, 1);
+        node.position.x = CELEIRO_POS.x + (entradaCeleiro.x - CELEIRO_POS.x) * p;
+        node.position.z = CELEIRO_POS.z + (entradaCeleiro.z - CELEIRO_POS.z) * p;
+        node.rotation.y = Math.atan2(entradaCeleiro.x - CELEIRO_POS.x, entradaCeleiro.z - CELEIRO_POS.z);
+        node.scale.setScalar(0.65 + p * 0.35);
+        if (p >= 1) {
+          node.scale.setScalar(1);
+          casa.fase = 'fora';
+          casa.quem = null;
+          casa.portasAlvo = 0;
+          falar('Voltei! ☀️', 2000);
+        }
+      }
+      break;
+    }
+  }
+
+  // porta acompanha o alvo com suavização
+  for (const p of portasCeleiro) {
+    p.aberto += (casa.portasAlvo - p.aberto) * Math.min(1, dt * 3.4);
+    p.pivo.rotation.y = -p.lado * p.aberto * 1.9;
+  }
+}
+
 // ── Frutas que caem das árvores ───────────────────────────────
 // A árvore solta uma das frutinhas penduradas; ela cai com gravidade,
 // quica uma vez e fica no chão para ser recolhida.
@@ -2161,6 +2440,7 @@ function atualizarHUD() {
 // ── Troca de personagem ───────────────────────────────────────
 function trocarAtor(i) {
   if (i === atorAtivo) return;
+  if (casa.fase !== 'fora') { falar('Saia do celeiro primeiro! 🚪', 2000); return; }
   atorAtivo = i;
   destino = null;          // cancela o caminho do anterior
   passoDoAtor = 0;
@@ -2175,6 +2455,7 @@ function trocarAtor(i) {
 for (const btn of document.querySelectorAll('#elenco button')) {
   btn.addEventListener('click', () => trocarAtor(+btn.dataset.i));
 }
+el('sairCasa').addEventListener('click', sairDaCasa);
 
 let vozAtiva = true;
 el('somBtn').addEventListener('click', () => {
@@ -2361,6 +2642,8 @@ const ponteiro = new THREE.Vector2();
 let destino = null;
 
 function aoTocar(cx, cy) {
+  // dentro do celeiro ou no meio da animação, o mundo não responde
+  if (casa.fase === 'entrando' || casa.fase === 'dentro' || casa.fase === 'saindo') return;
   ponteiro.x = (cx / innerWidth) * 2 - 1;
   ponteiro.y = -(cy / innerHeight) * 2 + 1;
   raycaster.setFromCamera(ponteiro, camera);
@@ -2378,6 +2661,7 @@ function aoTocar(cx, cy) {
       if (d.tipo === 'cocho') { encherCocho(); return; }
       if (d.tipo === 'ovo') { pegarOvo(o); return; }
       if (d.tipo === 'fruta') { colherFruta(o); return; }
+      if (d.tipo === 'portaCeleiro') { pedirEntrarNaCasa(); return; }
       o = o.parent;
     }
   }
@@ -2536,6 +2820,7 @@ function tick() {
   // IA dos bichos: passeiam sozinhos e vêm ao cocho quando tem comida
   atualizarIA(dt, t);
   atualizarFrutas(dt, t);
+  atualizarCasa(dt);
 
   // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
   // ser recolhido — em vez de virar só um número no HUD.
@@ -2610,18 +2895,24 @@ function tick() {
   // Câmera de terceira pessoa seguindo quem está sendo controlado.
   // Cada ator tem sua distância: o cachorro é baixo, então a câmera
   // chega mais perto; o urso é largo e pede mais recuo.
+  // Com o personagem escondido dentro do celeiro, seguir a posição dele
+  // colocaria a câmera dentro da parede — então ela olha a fachada.
+  const naCasa = casa.fase === 'dentro' || casa.fase === 'entrando' || casa.fase === 'saindo';
+  const foco = naCasa ? entradaCeleiro : corpoAtor.position;
+  const distFoco = naCasa ? 8.2 : ator.dist;
+
   const ang = corpoAtor.rotation.y + orbita;
   alvoCam.set(
-    corpoAtor.position.x - Math.sin(ang) * ator.dist,
-    ALT_CAM,
-    corpoAtor.position.z - Math.cos(ang) * ator.dist
+    foco.x - Math.sin(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco,
+    naCasa ? 4.8 : ALT_CAM,
+    foco.z - Math.cos(naCasa ? CELEIRO_ROT + Math.PI : ang) * distFoco
   );
   camera.position.lerp(alvoCam, 1 - Math.pow(0.0015, dt));
   miraCam.lerp(
     new THREE.Vector3(
-      corpoAtor.position.x,
-      corpoAtor.position.y + ator.alturaCam + ALTURA_MIRA_EXTRA,
-      corpoAtor.position.z
+      foco.x,
+      (naCasa ? 1.4 : corpoAtor.position.y + ator.alturaCam) + ALTURA_MIRA_EXTRA,
+      foco.z
     ),
     1 - Math.pow(0.002, dt)
   );
@@ -2648,6 +2939,7 @@ window.__jogo = {
   cena, mundo, animaisMesh, manu, estado, THREE,
   ATORES, obstaculos, resolver: resolverColisao,
   camera, renderer, tick,
+  entradaCeleiro, portasCeleiro, casa, entrarNaCasa: pedirEntrarNaCasa, sairDaCasa,
   get atorAtivo() { return atorAtivo; },
 };
 

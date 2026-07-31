@@ -100,6 +100,22 @@
   #carregando .flor { font-size: 62px; animation: gira 2.4s ease-in-out infinite; }
   @keyframes gira { 0%,100% { transform: rotate(-12deg) scale(1); } 50% { transform: rotate(12deg) scale(1.08); } }
 
+  /* ── Botão de sair do celeiro ── */
+  #sairCasa {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(26px + env(safe-area-inset-bottom));
+    display: none; align-items: center; gap: 10px; z-index: 40;
+    padding: 14px 24px; cursor: pointer;
+    background: linear-gradient(160deg, rgba(255,210,30,0.95), rgba(240,170,20,0.95));
+    color: #3d2b06; font-size: 26px; font-weight: 700;
+    border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 999px;
+    box-shadow: 0 8px 26px rgba(0,0,0,0.28);
+    transition: transform 0.14s ease;
+  }
+  #sairCasa .rot { font-size: 15px; letter-spacing: 0.2px; }
+  #sairCasa:active { transform: translateX(-50%) scale(0.94); }
+
   /* ── Seletor de personagem ── */
   #elenco {
     position: fixed; left: max(12px, env(safe-area-inset-left));
@@ -151,6 +167,8 @@
     </div>
   </div>
 </div>
+
+<button id="sairCasa">🚪<span class="rot">Sair do celeiro</span></button>
 
 <div id="elenco">
   <button data-i="0" class="ativo" title="Manu">👧<span class="nome">Manu</span></button>
