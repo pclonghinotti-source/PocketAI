@@ -2420,6 +2420,177 @@ const balao = el('balao'), seletor = el('seletor');
 
 let canteiroAlvo = null;
 
+// ══════════════════════════════════════════════════════════════
+//  Conversa
+// ══════════════════════════════════════════════════════════════
+// Cada personagem tem uma persona: jeito de falar, timbre e um repertório
+// próprio por intenção. É a mesma estrutura de "um prompt por
+// personagem" — só que as respostas são escritas, não geradas. Isso
+// mantém o jogo funcionando sem internet, sem custo e sem mandar a voz
+// da criança para lugar nenhum.
+//
+// Para trocar por um modelo de verdade um dia, basta `responder()`
+// consultar um servidor em vez das listas abaixo.
+
+const PERSONAS = {
+  manu: {
+    nome: 'Manu', timbre: 'manu',
+    // "prompt": menina de 4 anos, animada, fala de plantinhas e dos bichos
+    fala: {
+      saudacao: ['Oi! Que bom te ver! 🌻', 'Oii! Vamos cuidar da fazenda?', 'Olá! Tô plantando aqui!'],
+      quemEhVoce: ['Eu sou a Manu! Essa fazenda é minha!', 'Sou a Manu, e esses são meus amiguinhos!'],
+      brincar: ['Vamos! Corre comigo! 🏃', 'Oba! Vamos brincar de pega-pega!'],
+      fome: ['Vamos colher uma frutinha! 🍎', 'Tem morango maduro ali!'],
+      elogio: ['Ai, obrigada! 💕', 'Você também é legal!'],
+      ondeEsta: ['Deixa eu procurar… acho que tá por ali!', 'Olha em volta, tá pertinho!'],
+      ajuda: ['Toca no chão que eu ando! E arrasta pra girar!', 'Toca nos canteiros pra plantar!'],
+      tchau: ['Tchauzinho! Volta logo! 👋', 'Até depois!'],
+      sim: ['Oba!', 'Que legal!'],
+      nao: ['Tá bom então…', 'Tudo bem!'],
+      naoEntendi: ['Fala de novo? Não escutei direito!', 'Hein? Repete pra mim!'],
+    },
+  },
+  nenao: {
+    nome: 'Nenão', timbre: 'nenao',
+    // urso de pelúcia grandalhão, lento, carinhoso, meio dorminhoco
+    fala: {
+      saudacao: ['Grrr… oi, amiguinha! 🐻', 'Oi! Quer um abraço de urso?'],
+      quemEhVoce: ['Eu sou o Nenão! Sou de pelúcia!', 'Nenão! O urso mais fofo da fazenda!'],
+      brincar: ['Vamos! Mas devagarinho, tá? 🐾', 'Brincar? Eu adoro! Só não corre muito!'],
+      fome: ['Eu queria mel… 🍯', 'Tem frutinha? Urso gosta de frutinha!'],
+      elogio: ['Ahh, que fofa! Vem cá! 🤗', 'Obrigado! Você é meu amor!'],
+      ondeEsta: ['Hmmm… deixa eu cheirar… por ali!', 'Tá escondidinho, procura bem!'],
+      ajuda: ['Toca em mim que eu falo com você!', 'Vamos ver a fazendinha juntos?'],
+      tchau: ['Tchau… volta pro Nenão, tá? 🐻', 'Até logo, amiguinha!'],
+      sim: ['Que bom!', 'Ehhh!'],
+      nao: ['Ah… tudo bem.', 'Tá bom.'],
+      naoEntendi: ['Hmmm? Não entendi, fala de novo!', 'Repete devagarinho pro Nenão?'],
+    },
+  },
+  cachorro: {
+    nome: 'Bombeiro', timbre: 'cachorro',
+    // filhote elétrico, fala em frases curtas, late no meio
+    fala: {
+      saudacao: ['Au au! Oi oi oi! 🐶', 'Au! Você chegou! Que alegria!'],
+      quemEhVoce: ['Au! Sou o Bombeiro! Apago fogo!', 'Eu sou o dálmata bombeiro! Au au!'],
+      brincar: ['AU AU! Corre! Corre! 🎾', 'Sim sim sim! Joga a bolinha!'],
+      fome: ['Au! Tem ossinho? 🦴', 'Comidinha? Eu quero!'],
+      elogio: ['Au au! *abana o rabo* 🐕', 'Aaau! Faz cafuné!'],
+      ondeEsta: ['Au! Deixa eu farejar! Por aqui!', 'Au au! Segue eu!'],
+      ajuda: ['Au! Eu te sigo pra todo lado!', 'Au au! Toca no meu botão pra me controlar!'],
+      tchau: ['Auuu… tchau! 🐾', 'Au! Volta logo!'],
+      sim: ['Au au!', 'Isso!'],
+      nao: ['Auuu…', 'Ah…'],
+      naoEntendi: ['Au? Não entendi!', 'Hein? Au au!'],
+    },
+  },
+  galinha: {
+    nome: 'Galinha', timbre: 'cachorro',
+    fala: {
+      saudacao: ['Có có có! Oi! 🐔', 'Cocóóó! Bom dia!'],
+      quemEhVoce: ['Có! Eu sou a galinha! Boto ovinho!', 'Có có! Galinha da fazenda!'],
+      brincar: ['Có! Eu ciscar é minha brincadeira!', 'Có có! Vem ciscar comigo!'],
+      fome: ['Có! Milho! Milho! 🌽', 'Có có! Põe milho no cocho!'],
+      elogio: ['Có! Que carinho gostoso!', 'Cocóóó! 💛'],
+      ondeEsta: ['Có? Procura no ninho!', 'Có có! Olha no chão!'],
+      ajuda: ['Có! Eu boto ovinho, procura no chão!', 'Có! Me dá comida no cocho!'],
+      tchau: ['Có có! Tchau!', 'Cocóóó!'],
+      sim: ['Có!'], nao: ['Có…'],
+      naoEntendi: ['Có? Có có?', 'Não entendi! Có!'],
+    },
+  },
+  vaca: {
+    nome: 'Vaca', timbre: 'nenao',
+    fala: {
+      saudacao: ['Muuuu! Oi! 🐄', 'Muuu! Que bom te ver!'],
+      quemEhVoce: ['Muu! Sou a vaca! Dou leitinho!', 'Muuuu! A vaca da fazenda!'],
+      brincar: ['Muu… eu prefiro pastar devagarinho.', 'Muuu! Fica aqui comigo!'],
+      fome: ['Muuuu! Capim! Quero capim! 🌾', 'Muu! Põe comida no cocho!'],
+      elogio: ['Muuu! Que carinho bom! 💗', 'Muu muu!'],
+      ondeEsta: ['Muu? Olha lá longe…', 'Muuu! Tá por aí!'],
+      ajuda: ['Muu! Faz carinho em mim!', 'Muuu! Me dá comidinha!'],
+      tchau: ['Muuu! Tchau!', 'Muu! Volta!'],
+      sim: ['Muu!'], nao: ['Muuu…'],
+      naoEntendi: ['Muu? Não entendi!', 'Muuu?'],
+    },
+  },
+  ovelha: {
+    nome: 'Ovelha', timbre: 'manu',
+    fala: {
+      saudacao: ['Bééé! Oi! 🐑', 'Béé béé! Olá!'],
+      quemEhVoce: ['Bééé! Sou a ovelha! Sou fofinha!', 'Béé! Minha lã é macia!'],
+      brincar: ['Bééé! Vamos pular! 🐑', 'Béé! Corre comigo!'],
+      fome: ['Bééé! Quero comidinha!', 'Béé! Capim no cocho!'],
+      elogio: ['Bééé! Que carinho macio! 💕', 'Béé béé!'],
+      ondeEsta: ['Bééé? Procura ali!', 'Béé! Tá pertinho!'],
+      ajuda: ['Béé! Me faz carinho!', 'Bééé! Toca em mim!'],
+      tchau: ['Bééé! Tchau!', 'Béé!'],
+      sim: ['Béé!'], nao: ['Bééé…'],
+      naoEntendi: ['Béé? Não entendi!', 'Bééé?'],
+    },
+  },
+  porco: {
+    nome: 'Porquinho', timbre: 'nenao',
+    fala: {
+      saudacao: ['Oinc oinc! Oi! 🐖', 'Oinc! Olá!'],
+      quemEhVoce: ['Oinc! Sou o porquinho! Adoro lama!', 'Oinc oinc! O porquinho rosa!'],
+      brincar: ['Oinc! Vamos rolar na lama! 🐷', 'Oinc oinc! Brincar!'],
+      fome: ['OINC! Comida! Eu quero tudo! 🍽️', 'Oinc oinc! Enche o cocho!'],
+      elogio: ['Oinc! Que gostoso! 💗', 'Oinc oinc!'],
+      ondeEsta: ['Oinc? Cheirei… é por ali!', 'Oinc! Procura!'],
+      ajuda: ['Oinc! Me dá comida no cocho!', 'Oinc oinc! Faz carinho!'],
+      tchau: ['Oinc! Tchau!', 'Oinc oinc!'],
+      sim: ['Oinc!'], nao: ['Oinc…'],
+      naoEntendi: ['Oinc? Não entendi!', 'Oinc oinc?'],
+    },
+  },
+};
+
+/**
+ * Tira acentos e baixa a caixa. `\b` do regex em JS só considera
+ * [A-Za-z0-9_], então "você" (terminado em ê) nunca casava com \b no
+ * fim — normalizar resolve isso e ainda absorve erro de digitação.
+ */
+function normalizar(s) {
+  return (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().trim();
+}
+
+// Intenções por palavra-chave, já sem acento. A primeira que casar vence,
+// então as mais específicas vêm antes das genéricas.
+const INTENCOES = [
+  ['quemEhVoce', /\b(quem (e|eh) (voce|vc|tu)|qual (o )?seu nome|como (voce|vc) se chama|quem e essa|quem e esse)\b/],
+  ['elogio',     /\b(te amo|amo (voce|vc)|linda|lindo|bonita|bonito|fofa|fofo|legal|gosto de (voce|vc)|querida|querido|amiga|amigo)\b/],
+  ['brincar',    /\b(brincar|brinca|jogar|joga|correr|corre|pega.?pega|esconde|pular|pula)\b/],
+  ['fome',       /\b(fome|comer|comida|comidinha|lanche|faminto|faminta|papa|to com fome)\b/],
+  ['ondeEsta',   /\b(cade|onde|procura|achar|encontrar|perdi|sumiu)\b/],
+  ['ajuda',      /\b(ajuda|me ajuda|nao sei|o que faz|o que fazer|me ensina|como joga|como brinca)\b/],
+  ['tchau',      /\b(tchau|adeus|ate logo|xau|falou|boa noite|vou embora)\b/],
+  ['saudacao',   /\b(oi|ola|bom dia|boa tarde|e ai|eae|opa|alo)\b/],
+  ['sim',        /\b(sim|claro|quero|vamos|bora|isso|uhum|ta bom)\b/],
+  ['nao',        /\b(nao|nunca|nem|negativo)\b/],
+];
+
+/** Descobre a intenção da frase e devolve a resposta daquela persona. */
+function responder(quem, frase) {
+  const p = PERSONAS[quem] || PERSONAS.manu;
+  const texto = normalizar(frase);
+  let chave = 'naoEntendi';
+  for (const [nome, padrao] of INTENCOES) {
+    if (padrao.test(texto)) { chave = nome; break; }
+  }
+  const opcoes = p.fala[chave] || p.fala.naoEntendi;
+  return { texto: opcoes[Math.floor(Math.random() * opcoes.length)], timbre: p.timbre, nome: p.nome };
+}
+
+/** Com quem ela está conversando: o bicho tocado, ou o personagem ativo. */
+let interlocutor = null;
+function conversarCom(quem, frase) {
+  const r = responder(quem, frase);
+  falar(`${r.nome}: ${r.texto}`, 3400, r.timbre);
+}
+
 // ── Voz ───────────────────────────────────────────────────────
 // Sem escolher a voz, o navegador usa a padrão de pt-BR, que no Windows
 // é o "Daniel" (masculino). Preferimos uma voz feminina e subimos o tom
@@ -2532,6 +2703,68 @@ for (const btn of document.querySelectorAll('#elenco button')) {
   btn.addEventListener('click', () => trocarAtor(+btn.dataset.i));
 }
 el('sairCasa').addEventListener('click', sairDaCasa);
+
+// ══════════════════════════════════════════════════════════════
+//  Microfone
+// ══════════════════════════════════════════════════════════════
+// O reconhecimento do Safari no iPad é irregular, então os botões de
+// figura continuam sempre disponíveis — quem ainda não fala direito
+// consegue conversar do mesmo jeito.
+const ReconhecimentoVoz = window.SpeechRecognition || window.webkitSpeechRecognition;
+let reconhecedor = null;
+let ouvindo = false;
+
+function alvoDaConversa() {
+  return interlocutor || ['manu', 'cachorro', 'nenao'][atorAtivo] || 'manu';
+}
+
+function pararDeOuvir() {
+  ouvindo = false;
+  el('microfone').classList.remove('ouvindo');
+  try { reconhecedor && reconhecedor.stop(); } catch (e) {}
+}
+
+function ouvir() {
+  if (!ReconhecimentoVoz) {
+    falar('Fala comigo pelos botõezinhos! 💬', 2600, 'narrador');
+    return;
+  }
+  if (ouvindo) { pararDeOuvir(); return; }
+
+  reconhecedor = new ReconhecimentoVoz();
+  reconhecedor.lang = 'pt-BR';
+  reconhecedor.interimResults = false;
+  reconhecedor.maxAlternatives = 1;
+
+  reconhecedor.onresult = (ev) => {
+    const frase = ev.results[0][0].transcript;
+    pararDeOuvir();
+    conversarCom(alvoDaConversa(), frase);
+  };
+  reconhecedor.onerror = (ev) => {
+    pararDeOuvir();
+    // 'not-allowed' = microfone negado; o resto costuma ser ruído/silêncio
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+      falar('Não consegui usar o microfone. Usa os botõezinhos! 💬', 3200, 'narrador');
+    }
+  };
+  reconhecedor.onend = () => pararDeOuvir();
+
+  try {
+    reconhecedor.start();
+    ouvindo = true;
+    el('microfone').classList.add('ouvindo');
+  } catch (e) {
+    pararDeOuvir();
+  }
+}
+
+el('microfone').addEventListener('click', ouvir);
+
+// botões de figura: cada um manda uma frase pronta pela mesma via
+for (const btn of document.querySelectorAll('#papo button')) {
+  btn.addEventListener('click', () => conversarCom(alvoDaConversa(), btn.dataset.frase));
+}
 
 let vozAtiva = true;
 el('somBtn').addEventListener('click', () => {
@@ -2732,7 +2965,11 @@ function aoTocar(cx, cy) {
     while (o && o !== mundo) {
       const d = o.userData || {};
       if (d.tipo === 'canteiro') { tocarCanteiro(d.id); return; }
-      if (d.tipo === 'animal') { carinho(d.animal); return; }
+      if (d.tipo === 'animal') {
+        interlocutor = d.animal;   // passa a conversar com quem foi tocado
+        carinho(d.animal);
+        return;
+      }
       if (d.tipo === 'camisa') { acharCamisa(); return; }
       if (d.tipo === 'cocho') { encherCocho(); return; }
       if (d.tipo === 'ovo') { pegarOvo(o); return; }
@@ -3035,6 +3272,7 @@ window.__jogo = {
   entradaCeleiro, portasCeleiro, casa, entrarNaCasa: pedirEntrarNaCasa, sairDaCasa,
   get atorAtivo() { return atorAtivo; },
   get orbita() { return orbita; },
+  conversarCom, responder, PERSONAS,
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
 

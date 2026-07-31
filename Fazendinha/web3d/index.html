@@ -116,6 +116,39 @@
   #sairCasa .rot { font-size: 15px; letter-spacing: 0.2px; }
   #sairCasa:active { transform: translateX(-50%) scale(0.94); }
 
+  /* ── Barra de conversa ── */
+  #papo {
+    position: fixed; right: max(12px, env(safe-area-inset-right));
+    top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 9px; z-index: 25;
+  }
+  #papo button {
+    width: 52px; height: 52px; cursor: pointer; color: #fff;
+    background: rgba(20, 30, 45, 0.42);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 16px; font-size: 24px; line-height: 1;
+    transition: transform 0.14s ease, border-color 0.14s ease;
+  }
+  #papo button:active { transform: scale(0.92); }
+  #microfone {
+    background: rgba(255, 210, 30, 0.28) !important;
+    border-color: rgba(255, 210, 30, 0.55) !important;
+  }
+  /* pulsa enquanto está ouvindo, para a criança saber que pode falar */
+  #microfone.ouvindo {
+    background: rgba(232, 71, 143, 0.5) !important;
+    border-color: #ff8fc0 !important;
+    animation: escutando 1.1s ease-in-out infinite;
+  }
+  @keyframes escutando {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,143,192,0.55); }
+    50% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(255,143,192,0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #microfone.ouvindo { animation: none; }
+  }
+
   /* ── Seletor de personagem ── */
   #elenco {
     position: fixed; left: max(12px, env(safe-area-inset-left));
@@ -169,6 +202,15 @@
 </div>
 
 <button id="sairCasa">🚪<span class="rot">Sair do celeiro</span></button>
+
+<div id="papo">
+  <button id="microfone" title="Falar">🎤</button>
+  <button data-frase="oi" title="Oi">👋</button>
+  <button data-frase="quem é você" title="Quem é você?">❓</button>
+  <button data-frase="vamos brincar" title="Brincar">🎾</button>
+  <button data-frase="estou com fome" title="Comida">🍎</button>
+  <button data-frase="te amo" title="Carinho">💗</button>
+</div>
 
 <div id="elenco">
   <button data-i="0" class="ativo" title="Manu">👧<span class="nome">Manu</span></button>
