@@ -116,6 +116,26 @@
   #sairCasa .rot { font-size: 15px; letter-spacing: 0.2px; }
   #sairCasa:active { transform: translateX(-50%) scale(0.94); }
 
+  /* ── Ordens para os ajudantes ── */
+  #ordens {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    display: flex; gap: 10px; z-index: 24;
+  }
+  #ordens button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 78px; height: 56px; cursor: pointer; color: #fff; gap: 1px;
+    background: rgba(20, 30, 45, 0.46);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 16px; font-size: 21px; line-height: 1;
+    transition: transform 0.14s ease, border-color 0.14s ease;
+  }
+  #ordens button .rot { font-size: 10.5px; font-weight: 700; letter-spacing: 0.2px; }
+  #ordens button:active { transform: scale(0.93); border-color: #ffd21e; }
+  /* enquanto o ajudante trabalha, o botão fica marcado */
+  #ordens button.ocupado { border-color: #ffd21e; background: rgba(255,210,30,0.24); }
+
   /* ── Barra de conversa ── */
   #papo {
     position: fixed; right: max(12px, env(safe-area-inset-right));
@@ -202,6 +222,12 @@
 </div>
 
 <button id="sairCasa">🚪<span class="rot">Sair do celeiro</span></button>
+
+<div id="ordens">
+  <button data-ordem="buscar" title="Bombeiro, busca!">🐶<span class="rot">Busca!</span></button>
+  <button data-ordem="regar"  title="Nenão, rega as plantinhas">💧<span class="rot">Regar</span></button>
+  <button data-ordem="colher" title="Nenão, colhe o que está pronto">🧺<span class="rot">Colher</span></button>
+</div>
 
 <div id="papo">
   <button id="microfone" title="Falar">🎤</button>

@@ -2268,6 +2268,154 @@ function atualizarCasa(dt) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Ajudantes: o cachorro busca, o Nenão trabalha na horta
+// ══════════════════════════════════════════════════════════════
+// Cada ajudante executa uma tarefa por vez em etapas: vai até o alvo,
+// faz o serviço, volta para perto da Manu. Enquanto trabalha, sai do
+// modo "pet" — senão ele tentaria seguir e trabalhar ao mesmo tempo.
+
+const tarefas = { cachorro: null, nenao: null };
+
+const NOMES_AJUDANTE = { cachorro: 'Bombeiro', nenao: 'Nenão' };
+const IDX_ATOR = { cachorro: 1, nenao: 2 };
+
+function ajudanteOcupado(quem) {
+  return !!tarefas[quem];
+}
+
+/** Aponta o alvo mais próximo de um tipo, ou null se não houver. */
+function alvoMaisProximo(de, lista) {
+  let melhor = null, menor = Infinity;
+  for (const item of lista) {
+    const p = item.position || item.node?.position;
+    if (!p) continue;
+    const d = Math.hypot(p.x - de.x, p.z - de.z);
+    if (d < menor) { menor = d; melhor = item; }
+  }
+  return melhor;
+}
+
+function mandarBuscar(quem = 'cachorro') {
+  const p = PERSONAS[quem];
+  if (ajudanteOcupado(quem)) { falar(`${p.nome}: Já tô indo! Au!`, 2200, p.timbre); return; }
+  if (atorAtivo === IDX_ATOR[quem]) {
+    falar('Troca pra Manu pra mandar ele buscar! 👧', 2600, 'narrador');
+    return;
+  }
+  const node = ATORES[IDX_ATOR[quem]].node;
+  // ovo primeiro: some sozinho se ela demorar, fruta espera
+  const alvo = alvoMaisProximo(node.position, ovosNoChao) || alvoMaisProximo(node.position, frutasNoChao);
+  if (!alvo) {
+    falar(`${p.nome}: Não achei nada no chão pra buscar! Au?`, 2800, p.timbre);
+    return;
+  }
+  tarefas[quem] = { tipo: 'buscar', alvo, fase: 'indo' };
+  falar(`${p.nome}: Au au! Já vou buscar! 🐶`, 2400, p.timbre);
+}
+
+function mandarRegar(quem = 'nenao') {
+  const p = PERSONAS[quem];
+  if (ajudanteOcupado(quem)) { falar(`${p.nome}: Já tô regando, calma…`, 2200, p.timbre); return; }
+  if (atorAtivo === IDX_ATOR[quem]) {
+    falar('Troca pra Manu pra mandar o Nenão! 👧', 2600, 'narrador');
+    return;
+  }
+  const secos = estado.canteiros.filter(c => c.cultura && !c.regado).map(c => c.id);
+  if (!secos.length) {
+    falar(`${p.nome}: Tá tudo reguadinho! 💧`, 2600, p.timbre);
+    return;
+  }
+  tarefas[quem] = { tipo: 'regar', fila: secos, fase: 'indo' };
+  falar(`${p.nome}: Deixa comigo! Vou regar tudo! 💧`, 2800, p.timbre);
+}
+
+function mandarColher(quem = 'nenao') {
+  const p = PERSONAS[quem];
+  if (ajudanteOcupado(quem)) { falar(`${p.nome}: Tô ocupado ainda…`, 2200, p.timbre); return; }
+  if (atorAtivo === IDX_ATOR[quem]) {
+    falar('Troca pra Manu pra mandar o Nenão! 👧', 2600, 'narrador');
+    return;
+  }
+  const prontos = estado.canteiros.filter(c => estagio(c) === 'pronto').map(c => c.id);
+  if (!prontos.length) {
+    falar(`${p.nome}:Nada pronto ainda! Espera crescer 🌱`, 2800, p.timbre);
+    return;
+  }
+  tarefas[quem] = { tipo: 'colher', fila: prontos, fase: 'indo' };
+  falar(`${p.nome}: Vou colher pra você! 🧺`, 2800, p.timbre);
+}
+
+/** Move o ajudante até um ponto; devolve true quando chega. */
+function levarAjudante(quem, alvoX, alvoZ, dt, velocidade) {
+  const node = ATORES[IDX_ATOR[quem]].node;
+  const dx = alvoX - node.position.x, dz = alvoZ - node.position.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.7) return true;
+  const passo = dt * velocidade;
+  const novo = resolverColisao(node.position.x, node.position.z,
+    node.position.x + (dx / d) * passo, node.position.z + (dz / d) * passo,
+    ATORES[IDX_ATOR[quem]].raio);
+  const avancou = Math.hypot(novo.x - node.position.x, novo.z - node.position.z);
+  node.position.x = novo.x;
+  node.position.z = novo.z;
+  let da = Math.atan2(dx, dz) - node.rotation.y;
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  node.rotation.y += da * Math.min(1, dt * 6);
+  ATORES[IDX_ATOR[quem]].bobY = Math.abs(Math.sin(performance.now() / 90)) * 0.06;
+  return avancou < passo * 0.2;   // travou: considera que chegou ao possível
+}
+
+function atualizarAjudantes(dt) {
+  for (const quem of ['cachorro', 'nenao']) {
+    const t = tarefas[quem];
+    if (!t) continue;
+    // se ela assumir o controle dele, a tarefa é cancelada
+    if (atorAtivo === IDX_ATOR[quem]) { tarefas[quem] = null; continue; }
+
+    const p = PERSONAS[quem];
+    const node = ATORES[IDX_ATOR[quem]].node;
+    const vel = quem === 'cachorro' ? 4.6 : 2.6;
+
+    if (t.tipo === 'buscar') {
+      const alvoNode = t.alvo.node;
+      // o alvo pode ter sumido (ela pegou antes, ou o ovo expirou)
+      if (!alvoNode || !alvoNode.parent) { tarefas[quem] = null; continue; }
+      if (t.fase === 'indo') {
+        if (levarAjudante(quem, alvoNode.position.x, alvoNode.position.z, dt, vel)) {
+          // pega o item de fato, usando as mesmas funções do jogo
+          if (ovosNoChao.some(o => o.node === alvoNode)) pegarOvo(alvoNode);
+          else colherFruta(alvoNode);
+          t.fase = 'voltando';
+          falar(`${p.nome}: Peguei! Tô levando! 🐾`, 2200, p.timbre);
+        }
+      } else {
+        const dono = ATORES[atorAtivo].node.position;
+        if (levarAjudante(quem, dono.x, dono.z, dt, vel)) {
+          tarefas[quem] = null;
+          falar(`${p.nome}: Pronto! Toma! 🎁`, 2400, p.timbre);
+        }
+      }
+      continue;
+    }
+
+    // regar e colher percorrem uma fila de canteiros
+    if (!t.fila.length) {
+      tarefas[quem] = null;
+      falar(`${p.nome}: Terminei! 😊`, 2400, p.timbre);
+      continue;
+    }
+    const id = t.fila[0];
+    const cant = canteirosMesh[id];
+    if (levarAjudante(quem, cant.position.x, cant.position.z + 1.1, dt, vel)) {
+      if (t.tipo === 'regar') regar(id);
+      else colher(id);
+      t.fila.shift();
+    }
+  }
+}
+
 // ── Frutas que caem das árvores ───────────────────────────────
 // A árvore solta uma das frutinhas penduradas; ela cai com gravidade,
 // quica uma vez e fica no chão para ser recolhida.
@@ -2686,12 +2834,24 @@ const MAX_RODADAS = 4;
  * Antes da resposta genérica, checa o contexto: um bicho que acabou de
  * pedir comida deve falar da comida, não dar uma resposta qualquer.
  */
+// Ordens ditas em voz alta valem tanto quanto o botão. Ficam antes de
+// tudo: "busca a bolinha" é um comando, não conversa fiada.
+const ORDENS_FALADAS = [
+  [/\b(busca|buscar|pega|pegar|traz|trazer|procura)\b/, () => mandarBuscar('cachorro')],
+  [/\b(rega|regar|molha|molhar|agua|aguar)\b/,           () => mandarRegar('nenao')],
+  [/\b(colhe|colher|colheita|apanha)\b/,                 () => mandarColher('nenao')],
+];
+
 function conversarCom(quem, frase) {
   rodadasDeConversa++;
   const continua = rodadasDeConversa < MAX_RODADAS;
   const p = PERSONAS[quem] || PERSONAS.manu;
   const texto = normalizar(frase);
   const ativo = pedidosAtivos[quem];
+
+  for (const [padrao, acao] of ORDENS_FALADAS) {
+    if (padrao.test(texto)) { acao(); return; }
+  }
 
   let resposta = null;
 
@@ -2991,6 +3151,16 @@ el('microfone').addEventListener('click', () => {
 // botões de figura: cada um manda uma frase pronta pela mesma via
 for (const btn of document.querySelectorAll('#papo button')) {
   btn.addEventListener('click', () => conversarCom(alvoDaConversa(), btn.dataset.frase));
+}
+
+// ── Ordens ────────────────────────────────────────────────────
+const ACOES_ORDEM = {
+  buscar: () => mandarBuscar('cachorro'),
+  regar:  () => mandarRegar('nenao'),
+  colher: () => mandarColher('nenao'),
+};
+for (const btn of document.querySelectorAll('#ordens button')) {
+  btn.addEventListener('click', () => ACOES_ORDEM[btn.dataset.ordem]?.());
 }
 
 let vozAtiva = true;
@@ -3340,6 +3510,12 @@ function tick() {
   // pás do moinho girando
   if (pasMoinho) pasMoinho.rotation.z += dt * 0.55;
 
+  // botão de ordem marcado enquanto aquele ajudante está trabalhando
+  for (const btn of document.querySelectorAll('#ordens button')) {
+    const quem = btn.dataset.ordem === 'buscar' ? 'cachorro' : 'nenao';
+    btn.classList.toggle('ocupado', !!tarefas[quem]);
+  }
+
   // marcador da missão pairando sobre o objetivo
   const alvoM = alvoDaMissao();
   if (alvoM) {
@@ -3366,6 +3542,7 @@ function tick() {
   atualizarIA(dt, t);
   atualizarFrutas(dt, t);
   atualizarCasa(dt);
+  atualizarAjudantes(dt);
 
   // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
   // ser recolhido — em vez de virar só um número no HUD.
@@ -3391,7 +3568,8 @@ function tick() {
 
   // Cachorro como pet: quando não está sendo controlado, segue quem
   // está, mantendo distância para não empurrar nem colar.
-  if (atorAtivo !== 1) {
+  // o cachorro só faz o papel de pet quando não está numa tarefa
+  if (atorAtivo !== 1 && !tarefas.cachorro) {
     const alvoPet = ATORES[atorAtivo].node.position;
     const d = Math.hypot(dalmata.position.x - alvoPet.x, dalmata.position.z - alvoPet.z);
     if (d > 2.2) {
@@ -3505,6 +3683,7 @@ window.__jogo = {
   get orbita() { return orbita; },
   conversarCom, responder, PERSONAS, puxarConversa, CONVITES,
   PEDIDOS, pedidosAtivos, verificarPedidos, nivelAmizade,
+  tarefas, mandarBuscar, mandarRegar, mandarColher,
   get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
