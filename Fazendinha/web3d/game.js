@@ -2208,11 +2208,11 @@ function derrubarFruta(arv) {
   const escolhida = disponiveis[Math.floor(Math.random() * disponiveis.length)];
   escolhida.visible = false;
 
-  const info = FRUTAS[arv.tipo];
+  const cor = FRUTAS[arv.tipo].cor;
   const mundoPos = escolhida.getWorldPosition(new THREE.Vector3());
 
   const g = new THREE.Group();
-  const corpo = esfera(0.135, mat(info.cor, { roughness: 0.42 }), 0.94);
+  const corpo = esfera(0.135, mat(cor, { roughness: 0.42 }), 0.94);
   g.add(corpo);
   const cabinho = cilindro(0.014, 0.016, 0.1, mat(0x5b3a1c, { roughness: 0.8 }), 6);
   cabinho.position.y = 0.13;
@@ -2232,7 +2232,8 @@ function derrubarFruta(arv) {
     vy: 0, quicou: false,
     chao: alturaTerreno(mundoPos.x, mundoPos.z) + 0.135,
   });
-  falar(`Caiu uma ${info.nome.toLowerCase()}! ${info.emoji}`, 2200, 'narrador');
+  // sem fala aqui: as frutas caem o tempo todo e o aviso repetido cansa.
+  // A fruta quicando e balançando no chão já chama atenção sozinha.
 }
 
 function atualizarFrutas(dt, t) {
