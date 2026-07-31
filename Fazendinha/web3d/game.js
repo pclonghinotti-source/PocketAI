@@ -2976,6 +2976,10 @@ const TIMBRES = {
 function falar(txt, ms = 2600, quem = null, aoTerminar = null) {
   balao.textContent = txt;
   balao.style.display = 'block';
+  // a dica cede lugar ao balão: em tela estreita o texto quebra em mais
+  // linhas e os dois se encavalavam
+  const dica = document.getElementById('dica');
+  if (dica) { dica.style.opacity = '0'; setTimeout(() => dica.remove(), 700); }
   clearTimeout(falar._t);
   falar._t = setTimeout(() => (balao.style.display = 'none'), ms);
   if (!vozAtiva || !window.speechSynthesis) {
