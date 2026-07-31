@@ -807,6 +807,7 @@ function arvore(x, z, escala = 1, fruta = null) {
   const matCasca = new THREE.MeshStandardMaterial({ map: TEX_CASCA, roughness: 0.95 });
   const tronco = cilindro(0.16, 0.22, 1.3, matCasca);
   tronco.position.y = 0.65;
+  tronco.userData = { tipo: 'tronco' };   // sacudir derruba fruta na hora
   g.add(tronco);
 
   // raízes na base, para o tronco não sair do chão como um cano
@@ -882,6 +883,7 @@ for (const [x, z, s, fruta] of ARVORES) arvore(x, z, s, fruta);
   lago.rotation.x = -Math.PI / 2;
   lago.position.set(8.5, 0.03, 7);
   lago.receiveShadow = true;
+  lago.userData = { tipo: 'lago' };   // tocar aqui enche o regador
   mundo.add(lago);
   // borda de terra
   const borda = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.0, 32), mat(PALETA.terraEsc, { roughness: 1 }));
@@ -2150,6 +2152,30 @@ let cochoRacao = null;
 }
 addObstaculo(COCHO_POS.x, COCHO_POS.z, 1.0);
 
+// ── Ninho da galinha ──────────────────────────────────────────
+// Lugar fixo e reconhecível: sem isso o ovo cai onde a galinha estiver e
+// a criança tem de vasculhar o mapa inteiro.
+const NINHO_POS = new THREE.Vector3(-4.6, 0, 8.2);
+{
+  const g = new THREE.Group();
+  const mPalha = mat(0xd9b44a, { roughness: 0.95 });
+  // cesto de palha: anel de gravetos
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const gr = cilindro(0.045, 0.045, 0.5, mPalha, 6);
+    gr.position.set(Math.cos(a) * 0.52, 0.13, Math.sin(a) * 0.52);
+    gr.rotation.set(Math.PI / 2, 0, -a);
+    gr.rotation.z += 0.3;
+    g.add(gr);
+  }
+  const forro = esfera(0.44, mat(0xc79a3a, { roughness: 1 }), 0.34);
+  forro.position.y = 0.09;
+  g.add(forro);
+  g.position.copy(NINHO_POS);
+  g.userData = { tipo: 'ninho' };
+  mundo.add(g);
+}
+
 // ── Ovos no chão ──────────────────────────────────────────────
 // Quando a galinha bota, o ovo aparece de verdade no lugar dela.
 const ovosNoChao = [];
@@ -2265,6 +2291,179 @@ function atualizarCasa(dt) {
   for (const p of portasCeleiro) {
     p.aberto += (casa.portasAlvo - p.aberto) * Math.min(1, dt * 3.4);
     p.pivo.rotation.y = -p.lado * p.aberto * 1.9;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Regador
+// ══════════════════════════════════════════════════════════════
+// Regar deixa de ser um toque solto: a água acaba e precisa ser buscada
+// no lago. Vira um ciclo de ida e volta, e o lago passa a ter função.
+
+const CAPACIDADE_REGADOR = 3;
+const LAGO_POS = new THREE.Vector3(8.5, 0, 7);
+const LAGO_RAIO = 3.0;
+
+function aguaNoRegador() {
+  if (estado.agua === undefined) estado.agua = CAPACIDADE_REGADOR;
+  return estado.agua;
+}
+
+function encherRegador() {
+  if (aguaNoRegador() >= CAPACIDADE_REGADOR) {
+    falar('O regador já tá cheinho! 💧', 2200);
+    return;
+  }
+  estado.agua = CAPACIDADE_REGADOR;
+  salvar(); atualizarHUD();
+  falar('Enchi o regador no lago! 💧💧💧', 2600);
+  // respinguinhos na beira
+  for (let i = 0; i < 14; i++) {
+    const g = esfera(0.05 + Math.random() * 0.03, mat(0x8fd4f0, { roughness: 0.2 }), 1.2);
+    const a = Math.random() * Math.PI * 2;
+    g.position.set(LAGO_POS.x + Math.cos(a) * 1.2, 0.3, LAGO_POS.z + Math.sin(a) * 1.2);
+    g.userData = { vy: 1.6 + Math.random() * 1.4 };
+    mundo.add(g);
+    respingos.push({ node: g, vida: 1.1 });
+  }
+}
+
+const respingos = [];
+function atualizarRespingos(dt) {
+  for (let i = respingos.length - 1; i >= 0; i--) {
+    const r = respingos[i];
+    r.vida -= dt;
+    r.node.userData.vy -= 7 * dt;
+    r.node.position.y += r.node.userData.vy * dt;
+    if (r.vida <= 0 || r.node.position.y < 0) { mundo.remove(r.node); respingos.splice(i, 1); }
+  }
+}
+
+// ── Nuvem de chuva ────────────────────────────────────────────
+// De vez em quando chove e a horta inteira é regada. É a lição de que a
+// chuva ajuda, sem nenhuma punição envolvida.
+let chuva = null;
+const pingosChuva = [];
+
+function comecarChuva() {
+  if (chuva) return;
+  chuva = { tempo: 0, duracao: 22 };
+  falar('Olha, começou a chover! ☔ A chuva rega as plantinhas!', 3600, 'narrador');
+  // escurece o céu de leve enquanto chove
+  cena.fog.color.setHex(0x9db8c9);
+  cena.background = new THREE.Color(0x7fa8c4);
+}
+
+function pararChuva() {
+  chuva = null;
+  cena.fog.color.setHex(PALETA.ceuBaixo);
+  cena.background = new THREE.Color(PALETA.ceu);
+  for (const p of pingosChuva) mundo.remove(p.node);
+  pingosChuva.length = 0;
+  falar('Parou de chover! O sol voltou! ☀️', 2800, 'narrador');
+}
+
+function atualizarChuva(dt, t) {
+  // sorteia uma chuva de tempos em tempos
+  if (!chuva && Math.random() < dt * 0.006) comecarChuva();
+  if (!chuva) return;
+
+  chuva.tempo += dt;
+  if (chuva.tempo > chuva.duracao) {
+    // ao terminar, rega tudo o que estava plantado
+    let regou = 0;
+    for (const c of estado.canteiros) {
+      if (c.cultura && !c.regado) { c.regado = true; regou++; }
+    }
+    if (regou) { salvar(); desenharCanteiros(); }
+    pararChuva();
+    return;
+  }
+
+  // pingos caindo em volta de quem está jogando
+  const centro = ATORES[atorAtivo].node.position;
+  if (pingosChuva.length < 90) {
+    for (let i = 0; i < 3; i++) {
+      const g = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.28, 5),
+        new THREE.MeshBasicMaterial({ color: 0xb8e4f5, transparent: true, opacity: 0.7 })
+      );
+      g.position.set(centro.x + (Math.random() - 0.5) * 26, 9 + Math.random() * 4, centro.z + (Math.random() - 0.5) * 26);
+      g.castShadow = false;
+      mundo.add(g);
+      pingosChuva.push({ node: g, v: 11 + Math.random() * 5 });
+    }
+  }
+  for (let i = pingosChuva.length - 1; i >= 0; i--) {
+    const p = pingosChuva[i];
+    p.node.position.y -= p.v * dt;
+    if (p.node.position.y < alturaTerreno(p.node.position.x, p.node.position.z)) {
+      mundo.remove(p.node);
+      pingosChuva.splice(i, 1);
+    }
+  }
+}
+
+// ── Borboletas ────────────────────────────────────────────────
+// Fogem quando alguém chega perto: dá a sensação de bicho vivo, e a
+// criança tenta alcançar sem nunca conseguir — o que diverte sozinho.
+const borboletas = [];
+function criarBorboleta(x, z) {
+  const g = new THREE.Group();
+  const cor = [0xffd21e, 0xff8fc0, 0x8fd4f0, 0xffffff][Math.floor(Math.random() * 4)];
+  const m = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.6, side: THREE.DoubleSide });
+  const asas = [];
+  for (const lado of [-1, 1]) {
+    const asa = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), m);
+    asa.position.x = lado * 0.06;
+    asa.rotation.y = lado * 0.6;
+    g.add(asa);
+    asas.push(asa);
+  }
+  const corpo = cilindro(0.014, 0.014, 0.13, mat(0x3a2a1a), 6);
+  corpo.rotation.x = Math.PI / 2;
+  g.add(corpo);
+  g.position.set(x, 1.2, z);
+  mundo.add(g);
+  borboletas.push({
+    node: g, asas, fase: Math.random() * 6,
+    alvo: new THREE.Vector3(x, 1.2, z), fugindo: 0,
+  });
+}
+for (let i = 0; i < 7; i++) {
+  criarBorboleta((Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22);
+}
+
+function atualizarBorboletas(dt, t) {
+  const perseguidor = ATORES[atorAtivo].node.position;
+  for (const b of borboletas) {
+    const d = Math.hypot(b.node.position.x - perseguidor.x, b.node.position.z - perseguidor.z);
+    if (d < 2.6) {
+      // foge na direção oposta
+      b.fugindo = 1.2;
+      const fx = b.node.position.x - perseguidor.x, fz = b.node.position.z - perseguidor.z;
+      const n = Math.hypot(fx, fz) || 1;
+      b.alvo.set(
+        Math.max(LIMITE.minX, Math.min(LIMITE.maxX, b.node.position.x + (fx / n) * 5)),
+        1.3 + Math.random() * 0.7,
+        Math.max(LIMITE.minZ, Math.min(LIMITE.maxZ, b.node.position.z + (fz / n) * 5))
+      );
+    } else if (b.node.position.distanceTo(b.alvo) < 0.4 || Math.random() < dt * 0.35) {
+      b.alvo.set(
+        Math.max(LIMITE.minX, Math.min(LIMITE.maxX, b.node.position.x + (Math.random() - 0.5) * 6)),
+        1.0 + Math.random() * 0.9,
+        Math.max(LIMITE.minZ, Math.min(LIMITE.maxZ, b.node.position.z + (Math.random() - 0.5) * 6))
+      );
+    }
+    b.fugindo = Math.max(0, b.fugindo - dt);
+    const vel = b.fugindo > 0 ? 3.4 : 1.1;
+    b.node.position.lerp(b.alvo, Math.min(1, dt * vel));
+    // voo ondulado e bater de asas
+    b.node.position.y += Math.sin(t * 3 + b.fase) * dt * 0.5;
+    const bater = Math.sin(t * 16 + b.fase) * 0.8;
+    b.asas[0].rotation.y = 0.6 + bater;
+    b.asas[1].rotation.y = -0.6 - bater;
+    b.node.rotation.y = Math.atan2(b.alvo.x - b.node.position.x, b.alvo.z - b.node.position.z);
   }
 }
 
@@ -2409,7 +2608,8 @@ function atualizarAjudantes(dt) {
     const id = t.fila[0];
     const cant = canteirosMesh[id];
     if (levarAjudante(quem, cant.position.x, cant.position.z + 1.1, dt, vel)) {
-      if (t.tipo === 'regar') regar(id);
+      // o Nenão tem o próprio balde: não consome a água dela
+      if (t.tipo === 'regar') regar(id, false);
       else colher(id);
       t.fila.shift();
     }
@@ -2459,7 +2659,35 @@ function derrubarFruta(arv) {
   // A fruta quicando e balançando no chão já chama atenção sozinha.
 }
 
+/**
+ * Sacudir a árvore derruba uma fruta na hora, em vez de esperar o ciclo.
+ * `nodeTronco` é o cilindro tocado; subimos até o grupo da árvore.
+ */
+function sacudirArvore(nodeTronco) {
+  const grupo = nodeTronco.parent;
+  const arv = arvoresFrutiferas.find(a => a.grupo === grupo);
+  if (!arv) {
+    falar('Essa árvore não tem frutinha 🌳', 2400);
+    return;
+  }
+  if (!arv.penduradas.some(f => f.visible)) {
+    falar('Já peguei todas dessa árvore! Espera nascer mais 🌳', 3000);
+    return;
+  }
+  arv.balanco = 0.5;            // animação de tremida
+  derrubarFruta(arv);
+  arv.proxima = performance.now() + 14000 + Math.random() * 16000;
+  falar('Sacudi a árvore! Caiu fruta! 🍎', 2400);
+}
+
 function atualizarFrutas(dt, t) {
+  // tremida da árvore sacudida
+  for (const arv of arvoresFrutiferas) {
+    if (!arv.balanco) continue;
+    arv.balanco = Math.max(0, arv.balanco - dt * 1.6);
+    arv.grupo.rotation.z = Math.sin(performance.now() / 45) * arv.balanco * 0.09;
+    if (arv.balanco === 0) arv.grupo.rotation.z = 0;
+  }
   const agora = performance.now();
   for (const arv of arvoresFrutiferas) {
     if (agora >= arv.proxima) {
@@ -3022,6 +3250,12 @@ function falar(txt, ms = 2600, quem = null, aoTerminar = null) {
 function atualizarHUD() {
   hudEstrelas.textContent = estado.estrelas;
   hudCesta.textContent = estado.cesta;
+  const hudAgua = el('agua');
+  if (hudAgua) {
+    hudAgua.textContent = aguaNoRegador();
+    // vazio fica em destaque para ela perceber que precisa ir ao lago
+    el('seloAgua').classList.toggle('vazio', aguaNoRegador() === 0);
+  }
   const m = MISSOES[estado.missao];
   if (m) {
     hudMissaoIcone.textContent = m.icone;
@@ -3218,13 +3452,26 @@ function plantar(id, tipo) {
   falar('Plantando sementinha! 🌱');
 }
 
-function regar(id) {
+/** `daChuva` e o trabalho do Nenão não gastam a água do regador dela. */
+function regar(id, gastaAgua = true) {
   const c = estado.canteiros[id];
   if (!c || !c.cultura || c.regado) return;
+
+  if (gastaAgua) {
+    if (aguaNoRegador() <= 0) {
+      falar('Acabou a água! Vai encher no lago 💧', 3000);
+      // aponta o lago para ela saber onde é
+      marcadorMissao.visible = true;
+      marcadorMissao.position.set(LAGO_POS.x, 2.6, LAGO_POS.z);
+      return;
+    }
+    estado.agua--;
+  }
+
   c.regado = true;
   estado.regasFeitas++;
-  salvar(); desenharCanteiros();
-  falar('Que delícia, água! 💧');
+  salvar(); desenharCanteiros(); atualizarHUD();
+  falar(gastaAgua && estado.agua === 0 ? 'Reguei! A água acabou… 💧' : 'Que delícia, água! 💧');
   avancar('regou');
 }
 
@@ -3257,6 +3504,14 @@ function carinho(tipo, calado = false) {
   // cada bicho no seu tom: a vaca grave, a galinha esganiçada
   const tomBicho = { galinha: 'cachorro', vaca: 'nenao', ovelha: 'manu', porco: 'nenao' };
   salvar(); atualizarHUD();
+
+  // Carinho vira afeto visível: o bicho fecha os olhinhos e solta
+  // coraçõezinhos. É o retorno que a criança entende sem ler nada.
+  const bicho = animaisMesh.find(b => b.tipo === tipo);
+  if (bicho) {
+    bicho.carinhoAte = performance.now() + 1600;
+    for (let i = 0; i < 6; i++) soltarCoracao(bicho.grupo.position);
+  }
   if (!calado) falar(`${info.nome}: ${falas[tipo]}`, 2600, tomBicho[tipo]);
   avancar('carinho');
 }
@@ -3321,6 +3576,44 @@ function avancar(evento) {
   salvar(); atualizarHUD();
 }
 
+// ── Coraçõezinhos do carinho ──────────────────────────────────
+const coracoes = [];
+function soltarCoracao(pos) {
+  // dois lóbulos e uma ponta: coração legível mesmo bem pequeno
+  const g = new THREE.Group();
+  const m = new THREE.MeshBasicMaterial({ color: 0xff6b9d, transparent: true, opacity: 0.95 });
+  for (const lado of [-1, 1]) {
+    const lobo = new THREE.Mesh(new THREE.CircleGeometry(0.075, 12), m);
+    lobo.position.set(lado * 0.06, 0.05, 0);
+    g.add(lobo);
+  }
+  const ponta = new THREE.Mesh(new THREE.CircleGeometry(0.105, 3), m);
+  ponta.rotation.z = Math.PI;
+  ponta.position.y = -0.055;
+  g.add(ponta);
+  g.position.set(
+    pos.x + (Math.random() - 0.5) * 0.5,
+    pos.y + 0.7 + Math.random() * 0.3,
+    pos.z + (Math.random() - 0.5) * 0.5
+  );
+  mundo.add(g);
+  coracoes.push({ node: g, vida: 1.6, giro: (Math.random() - 0.5) * 2, mat: m });
+}
+
+function atualizarCoracoes(dt) {
+  for (let i = coracoes.length - 1; i >= 0; i--) {
+    const c = coracoes[i];
+    c.vida -= dt;
+    c.node.position.y += dt * 0.85;
+    c.node.rotation.z += c.giro * dt;
+    c.node.scale.setScalar(0.7 + (1.6 - c.vida) * 0.35);
+    c.mat.opacity = Math.max(0, c.vida / 1.6);
+    // sempre de frente para a câmera, senão somem de perfil
+    c.node.quaternion.copy(camera.quaternion);
+    if (c.vida <= 0) { mundo.remove(c.node); coracoes.splice(i, 1); }
+  }
+}
+
 const confetes = [];
 function festa() {
   for (let i = 0; i < 40; i++) {
@@ -3380,6 +3673,9 @@ function aoTocar(cx, cy) {
       if (d.tipo === 'ovo') { pegarOvo(o); return; }
       if (d.tipo === 'fruta') { colherFruta(o); return; }
       if (d.tipo === 'portaCeleiro') { pedirEntrarNaCasa(); return; }
+      if (d.tipo === 'lago') { encherRegador(); return; }
+      if (d.tipo === 'tronco') { sacudirArvore(o); return; }
+      if (d.tipo === 'ninho') { falar('É o ninho da galinha! Ela bota os ovinhos aqui 🥚', 3000); return; }
       o = o.parent;
     }
   }
@@ -3536,10 +3832,25 @@ function tick() {
     if (n.grupo.position.x > 46) n.grupo.position.x = -46;
   }
 
-  // animais respiram e balançam de leve
+  // animais respiram e balançam de leve; ao receber carinho, encolhem os
+  // olhinhos e balançam mais, como quem gosta
+  const agoraMs = performance.now();
   for (const a of animaisMesh) {
-    a.corpo.position.y = Math.sin(t * 1.9 + a.fase) * 0.022;
-    a.corpo.rotation.z = Math.sin(t * 1.1 + a.fase) * 0.03;
+    const mimado = a.carinhoAte && agoraMs < a.carinhoAte;
+    a.corpo.position.y = Math.sin(t * (mimado ? 6 : 1.9) + a.fase) * (mimado ? 0.05 : 0.022);
+    a.corpo.rotation.z = Math.sin(t * (mimado ? 4 : 1.1) + a.fase) * (mimado ? 0.09 : 0.03);
+    if (a.olhos === undefined) {
+      a.olhos = [];
+      a.corpo.traverse(o => {
+        // olhos são as esferas pretas pequenas
+        if (o.isMesh && o.material?.color?.getHex() === 0x1a1a1a && o.geometry?.parameters?.radius < 0.04) {
+          a.olhos.push({ mesh: o, escalaY: o.scale.y });
+        }
+      });
+    }
+    for (const olho of a.olhos) {
+      olho.mesh.scale.y = mimado ? olho.escalaY * 0.18 : olho.escalaY;   // fecha
+    }
   }
 
   // IA dos bichos: passeiam sozinhos e vêm ao cocho quando tem comida
@@ -3547,6 +3858,10 @@ function tick() {
   atualizarFrutas(dt, t);
   atualizarCasa(dt);
   atualizarAjudantes(dt);
+  atualizarCoracoes(dt);
+  atualizarRespingos(dt);
+  atualizarChuva(dt, t);
+  atualizarBorboletas(dt, t);
 
   // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
   // ser recolhido — em vez de virar só um número no HUD.
@@ -3556,10 +3871,12 @@ function tick() {
     else if (Date.now() >= gal.proximoOvo && gal.ovos < 4) {
       gal.ovos++;
       gal.proximoOvo = Date.now() + 45000;
-      const galMesh = animaisMesh.find(b => b.tipo === 'galinha');
-      const p = galMesh ? galMesh.grupo.position : new THREE.Vector3();
-      porOvoNoChao(p.x + (Math.random() - 0.5) * 0.6, p.z - 0.5);
-      falar('A galinha botou um ovinho! 🥚');
+      // sempre no ninho: lugar fixo é o que torna possível "ir buscar"
+      porOvoNoChao(
+        NINHO_POS.x + (Math.random() - 0.5) * 0.35,
+        NINHO_POS.z + (Math.random() - 0.5) * 0.35
+      );
+      falar('A galinha botou um ovinho no ninho! 🥚');
       salvar();
     }
   }
@@ -3688,6 +4005,9 @@ window.__jogo = {
   conversarCom, responder, PERSONAS, puxarConversa, CONVITES,
   PEDIDOS, pedidosAtivos, verificarPedidos, nivelAmizade,
   tarefas, mandarBuscar, mandarRegar, mandarColher,
+  regar, encherRegador, sacudirArvore, arvoresFrutiferas, carinho,
+  comecarChuva, borboletas, coracoes, NINHO_POS, LAGO_POS,
+  get chuva() { return chuva; },
   get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
