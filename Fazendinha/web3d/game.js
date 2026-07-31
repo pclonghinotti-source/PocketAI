@@ -1283,40 +1283,49 @@ function criarManu() {
 /** Nenão: urso de pelúcia de camisa verde, com pelo em várias tonalidades. */
 function criarNenao() {
   const g = new THREE.Group();
+  // Tronco, cabeça e braços vivem num grupo erguido do chão: sem isso
+  // as pernas nascem dentro da barriga e o urso vira uma bola.
+  const ELEVACAO = 0.378;   // calibrado para a sola encostar no chão
+  const alto = new THREE.Group();
+  alto.position.y = ELEVACAO;
+  g.add(alto);
   const mUrso = matPelo(PALETA.urso, 0x5a3618, 0xc08a4e);
   const mClaro = matPelo(PALETA.ursoClaro, 0x8a6438, 0xdcb98a, { roughness: 0.88 });
   const mFocinho = mat(0xc9a173, { roughness: 0.7 });
 
-  // tronco em pera: mais largo embaixo, como urso de pelúcia
+  // Tronco atarracado e bojudo. Pelúcia tem barriga estufada e ombros
+  // estreitos — é o que dá a silhueta de brinquedo em vez de urso real.
   const corpo = torneado([
-    [0.0, 0.0], [0.20, 0.01], [0.27, 0.08], [0.305, 0.20],
-    [0.30, 0.32], [0.26, 0.44], [0.19, 0.52], [0.0, 0.545],
-  ], mUrso, 26);
-  g.add(corpo);
+    [0.0, 0.0], [0.21, 0.005], [0.29, 0.06], [0.325, 0.16],
+    [0.335, 0.26], [0.315, 0.36], [0.26, 0.46], [0.18, 0.53], [0.0, 0.55],
+  ], mUrso, 28);
+  alto.add(corpo);
 
-  // barriga mais clara, como a maioria dos ursos
-  const barriga = esfera(0.21, mClaro, 1.05);
-  barriga.scale.z = 0.62;
-  barriga.position.set(0, 0.26, 0.17);
-  g.add(barriga);
+  // barriga clara em relevo, o "avental" costurado
+  const barriga = esfera(0.235, mClaro, 1.08);
+  barriga.scale.z = 0.6;
+  barriga.position.set(0, 0.245, 0.19);
+  alto.add(barriga);
 
   const camisa = torneado([
     [0.0, 0.0], [0.315, 0.005], [0.325, 0.10], [0.315, 0.20], [0.28, 0.27], [0.0, 0.285],
   ], mat(PALETA.camisa, { roughness: 0.72 }), 26);
   camisa.position.y = 0.155;
-  g.add(camisa);
+  alto.add(camisa);
   // gola e barra em tom mais escuro dão acabamento de roupa
   for (const [y, r] of [[0.44, 0.20], [0.155, 0.317]]) {
     const faixa = new THREE.Mesh(new THREE.TorusGeometry(r, 0.016, 8, 26), mat(0x2c9c52, { roughness: 0.7 }));
     faixa.rotation.x = Math.PI / 2;
     faixa.position.y = y;
     faixa.castShadow = true;
-    g.add(faixa);
+    alto.add(faixa);
   }
 
   // ── Cabeça ──
+  // Proporcionalmente grande: cabeça pequena lê como animal, cabeça
+  // grande lê como brinquedo.
   const cabeca = new THREE.Group();
-  const cranio = esfera(0.235, mUrso, 0.96);
+  const cranio = esfera(0.265, mUrso, 0.97);
   cabeca.add(cranio);
   // bochechas
   for (const lado of [-1, 1]) {
@@ -1345,14 +1354,14 @@ function criarNenao() {
   cabeca.add(boca);
 
   for (const lado of [-1, 1]) {
-    // orelha com espessura: disco externo + interior claro
-    const orelha = esfera(0.092, mUrso, 0.95);
-    orelha.scale.z = 0.55;
-    orelha.position.set(lado * 0.175, 0.185, -0.01);
+    // orelhas grandes e chapadas, costuradas na lateral do crânio
+    const orelha = esfera(0.115, mUrso, 0.98);
+    orelha.scale.z = 0.42;
+    orelha.position.set(lado * 0.205, 0.20, -0.01);
     cabeca.add(orelha);
-    const dentro = esfera(0.055, mClaro, 0.9);
-    dentro.scale.z = 0.5;
-    dentro.position.set(lado * 0.178, 0.182, 0.045);
+    const dentro = esfera(0.070, mClaro, 0.92);
+    dentro.scale.z = 0.35;
+    dentro.position.set(lado * 0.208, 0.198, 0.045);
     cabeca.add(dentro);
 
     // olho com brilho
@@ -1371,7 +1380,7 @@ function criarNenao() {
   }
 
   cabeca.position.y = 0.735;
-  g.add(cabeca);
+  alto.add(cabeca);
 
   // ── Braços com cotovelo ──
   const bracos = [];
@@ -1398,31 +1407,87 @@ function criarNenao() {
     // sobrescrever, senão o braço gira para dentro do tronco
     b.userData.abertura = lado * 0.28;
     b.rotation.z = b.userData.abertura;
-    g.add(b);
+    alto.add(b);
     bracos.push(b);
   }
 
-  // ── Pernas com pata e dedinhos ──
+  // ── Pernas roliças, com pivô no quadril ──
+  // Perna de pelúcia é curta e grossa, com o pé virado para frente e a
+  // sola clara à mostra quando ele anda.
+  const pernas = [];
   for (const lado of [-1, 1]) {
-    const perna = cilindro(0.088, 0.08, 0.17, mUrso, 12);
-    perna.position.set(lado * 0.125, 0.085, 0);
-    g.add(perna);
-    const pe = esfera(0.098, mUrso, 0.72);
-    pe.scale.z = 1.35;
-    pe.position.set(lado * 0.125, 0.045, 0.045);
-    g.add(pe);
-    const sola = esfera(0.062, mClaro, 0.42);
-    sola.scale.z = 1.25;
-    sola.position.set(lado * 0.125, 0.03, 0.075);
-    g.add(sola);
+    const pivo = new THREE.Group();
+
+    const coxa = esfera(0.115, mUrso, 1);
+    coxa.scale.set(1, 1.15, 1);
+    coxa.position.y = -0.10;
+    pivo.add(coxa);
+
+    const joelho = new THREE.Group();
+    const canela = esfera(0.098, mUrso, 1);
+    canela.scale.set(1, 1.05, 1);
+    canela.position.y = -0.075;
+    joelho.add(canela);
+
+    // pé: sola clara virada para frente, como pelúcia costurada
+    const pe = esfera(0.105, mUrso, 0.68);
+    pe.scale.z = 1.5;
+    pe.position.set(0, -0.16, 0.055);
+    joelho.add(pe);
+    const sola = esfera(0.072, mClaro, 0.4);
+    sola.scale.z = 1.35;
+    sola.position.set(0, -0.175, 0.085);
+    joelho.add(sola);
+    // almofadinhas dos dedos
     for (let d = -1; d <= 1; d++) {
-      const dedo = esfera(0.022, mClaro, 0.8);
-      dedo.position.set(lado * 0.125 + d * 0.036, 0.055, 0.135);
-      g.add(dedo);
+      const dedo = esfera(0.024, mClaro, 0.75);
+      dedo.position.set(d * 0.038, -0.155, 0.145);
+      joelho.add(dedo);
     }
+
+    joelho.position.y = -0.185;
+    pivo.add(joelho);
+
+    pivo.position.set(lado * 0.135, ELEVACAO + 0.04, 0);
+    g.add(pivo);
+    pernas.push({ pivo, joelho });
   }
 
-  g.userData = { bracos, cabeca };
+  // ── Detalhes de pelúcia ──
+  const mCostura = mat(0x6b4526, { roughness: 0.9 });
+
+  // costura central do peito, marca de brinquedo de pano
+  for (let i = 0; i < 7; i++) {
+    const ponto = esfera(0.013, mCostura, 0.7);
+    ponto.scale.z = 0.5;
+    ponto.position.set(0, 0.14 + i * 0.052, 0.285 - i * 0.006);
+    alto.add(ponto);
+  }
+  // costura de cada orelha e das juntas
+  for (const lado of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const p = esfera(0.011, mCostura, 0.7);
+      p.position.set(lado * (0.24 + i * 0.006), 0.735 + 0.185 + Math.cos(i * 0.7) * 0.03, -0.02 + i * 0.018);
+      alto.add(p);
+    }
+  }
+  // remendo quadrado na perna, com pontinhos em volta
+  const remendo = caixa(0.13, 0.13, 0.02, mat(0xa9743d, { roughness: 0.95 }));
+  remendo.position.set(-0.135, 0.22, 0.105);
+  alto.add(remendo);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const p = esfera(0.010, mCostura, 0.7);
+    p.position.set(-0.135 + Math.cos(a) * 0.078, 0.22 + Math.sin(a) * 0.078, 0.115);
+    alto.add(p);
+  }
+  // etiqueta na lateral, aquele detalhe de bichinho de pelúcia
+  const etiqueta = caixa(0.075, 0.05, 0.008, mat(0xf0ece0, { roughness: 0.85 }));
+  etiqueta.position.set(0.30, 0.20, 0.06);
+  etiqueta.rotation.z = 0.4;
+  alto.add(etiqueta);
+
+  g.userData = { bracos, pernas, cabeca };
   return g;
 }
 
@@ -1667,6 +1732,7 @@ const ATORES = [
       // só oscila em torno da abertura de repouso, para os braços não
       // atravessarem o tronco.
       const [bE, bD] = nenao.userData.bracos;
+      const [pE, pD] = nenao.userData.pernas;
       if (andando) {
         passoDoAtor += dt * 6.5;
         const s = Math.sin(passoDoAtor);
@@ -1676,6 +1742,11 @@ const ATORES = [
         bD.rotation.x = -s * 0.5;
         bE.rotation.z = bE.userData.abertura + Math.abs(s) * 0.10;
         bD.rotation.z = bD.userData.abertura - Math.abs(s) * 0.10;
+        // passada curta e pesada, com o joelho dobrando no recuo
+        pE.pivo.rotation.x = -s * 0.42;
+        pD.pivo.rotation.x = s * 0.42;
+        pE.joelho.rotation.x = Math.max(0, s) * 0.55;
+        pD.joelho.rotation.x = Math.max(0, -s) * 0.55;
       } else {
         this.bobY += (0 - this.bobY) * Math.min(1, dt * 6);
         nenao.rotation.z += (0 - nenao.rotation.z) * Math.min(1, dt * 6);
@@ -1684,6 +1755,10 @@ const ATORES = [
         // aceno do braço direito: abre para fora, nunca para dentro
         bD.rotation.x = -0.55 + Math.sin(t * 3.4) * 0.28;
         bD.rotation.z = bD.userData.abertura + 0.45 + Math.sin(t * 3.4) * 0.22;
+        for (const p of [pE, pD]) {
+          p.pivo.rotation.x += (0 - p.pivo.rotation.x) * Math.min(1, dt * 4);
+          p.joelho.rotation.x += (0 - p.joelho.rotation.x) * Math.min(1, dt * 4);
+        }
       }
     },
   },
