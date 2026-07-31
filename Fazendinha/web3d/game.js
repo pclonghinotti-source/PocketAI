@@ -2584,11 +2584,48 @@ function responder(quem, frase) {
   return { texto: opcoes[Math.floor(Math.random() * opcoes.length)], timbre: p.timbre, nome: p.nome };
 }
 
+// Convites: o bichinho puxa assunto para a criança ter o que responder.
+// Terminam em pergunta de propósito — pergunta convida resposta.
+const CONVITES = {
+  manu:     ['Oi! Como você tá hoje?', 'Vamos brincar? Fala comigo!', 'Você gosta da minha fazenda?'],
+  nenao:    ['Oi amiguinha! Quer um abraço?', 'Grrr… você quer brincar comigo?', 'Eu sou fofo, né? Fala pro Nenão!'],
+  cachorro: ['Au au! Você quer correr comigo?', 'Au! Fala meu nome! Fala!', 'Au au! Quer jogar a bolinha?'],
+  galinha:  ['Có có! Você viu meu ovinho?', 'Có! Você quer me dar milho?', 'Cocóóó! Fala comigo!'],
+  vaca:     ['Muuu! Você me faz carinho?', 'Muu! Você gosta de leitinho?', 'Muuuu! Conversa comigo!'],
+  ovelha:   ['Bééé! Minha lã é macia, quer sentir?', 'Béé! Você quer pular comigo?', 'Bééé! Fala comigo!'],
+  porco:    ['Oinc! Você tem comidinha pra mim?', 'Oinc oinc! Vamos rolar na lama?', 'Oinc! Fala comigo!'],
+};
+
 /** Com quem ela está conversando: o bicho tocado, ou o personagem ativo. */
 let interlocutor = null;
+// declarado aqui porque `falar()` precisa consultar antes da seção do
+// microfone existir no arquivo
+let ouvindo = false;
+
+// Quantas trocas seguidas já houve. Depois de algumas, a conversa
+// encerra sozinha em vez de deixar o microfone reabrindo sem fim.
+let rodadasDeConversa = 0;
+const MAX_RODADAS = 4;
+
+/** Responde ao que ela falou e reabre o microfone para ela continuar. */
 function conversarCom(quem, frase) {
   const r = responder(quem, frase);
-  falar(`${r.nome}: ${r.texto}`, 3400, r.timbre);
+  rodadasDeConversa++;
+  const continua = rodadasDeConversa < MAX_RODADAS;
+  falar(`${r.nome}: ${r.texto}`, 3400, r.timbre, continua ? () => ouvir() : null);
+}
+
+/**
+ * Toque no bichinho: ele fala primeiro e só então abre o microfone.
+ * Abrir junto com a fala faria o jogo ouvir a própria voz.
+ */
+function puxarConversa(quem) {
+  interlocutor = quem;
+  rodadasDeConversa = 0;
+  const p = PERSONAS[quem] || PERSONAS.manu;
+  const lista = CONVITES[quem] || CONVITES.manu;
+  const convite = lista[Math.floor(Math.random() * lista.length)];
+  falar(`${p.nome}: ${convite}`, 3600, p.timbre, () => ouvir());
 }
 
 // ── Voz ───────────────────────────────────────────────────────
@@ -2645,12 +2682,21 @@ const TIMBRES = {
  * `quem` escolhe o timbre. Falas de bichos e de missão usam o narrador,
  * que é a própria Manu contando o que aconteceu.
  */
-function falar(txt, ms = 2600, quem = null) {
+function falar(txt, ms = 2600, quem = null, aoTerminar = null) {
   balao.textContent = txt;
   balao.style.display = 'block';
   clearTimeout(falar._t);
   falar._t = setTimeout(() => (balao.style.display = 'none'), ms);
-  if (!vozAtiva || !window.speechSynthesis) return;
+  if (!vozAtiva || !window.speechSynthesis) {
+    // sem voz, o "fim da fala" é o fim do balão
+    if (aoTerminar) setTimeout(aoTerminar, Math.min(ms, 1800));
+    return;
+  }
+
+  // Se o microfone estiver aberto, fecha antes de falar. Um bichinho
+  // respondendo com o microfone ligado vira laço: ele se escuta e
+  // responde a si mesmo.
+  if (typeof pararDeOuvir === 'function' && ouvindo) pararDeOuvir();
 
   // sem `quem`, herda de quem está sendo controlado
   const porAtor = ['manu', 'cachorro', 'nenao'];
@@ -2665,6 +2711,15 @@ function falar(txt, ms = 2600, quem = null) {
   u.lang = 'pt-BR';
   u.rate = timbre.rate;
   u.pitch = timbre.pitch;
+  if (aoTerminar) {
+    // rede de segurança: se onend não vier (acontece no Safari), o
+    // callback ainda dispara pelo tempo estimado da frase
+    let disparou = false;
+    const uma = () => { if (!disparou) { disparou = true; aoTerminar(); } };
+    u.onend = uma;
+    u.onerror = uma;
+    setTimeout(uma, Math.max(1500, txt.length * 90));
+  }
   speechSynthesis.cancel();   // não empilha falas por cima da anterior
   speechSynthesis.speak(u);
 }
@@ -2712,40 +2767,76 @@ el('sairCasa').addEventListener('click', sairDaCasa);
 // consegue conversar do mesmo jeito.
 const ReconhecimentoVoz = window.SpeechRecognition || window.webkitSpeechRecognition;
 let reconhecedor = null;
-let ouvindo = false;
+let microfoneIndisponivel = false;   // permissão negada, não insiste
+let avisouDoMicrofone = false;       // o aviso sai uma vez, não a cada toque
 
 function alvoDaConversa() {
   return interlocutor || ['manu', 'cachorro', 'nenao'][atorAtivo] || 'manu';
 }
 
+let timerMicrofone = null;
+
 function pararDeOuvir() {
   ouvindo = false;
   el('microfone').classList.remove('ouvindo');
-  try { reconhecedor && reconhecedor.stop(); } catch (e) {}
+  clearTimeout(timerMicrofone);
+  timerMicrofone = null;
+  if (reconhecedor) {
+    // solta os handlers antes de parar: sem isso o onend dispara depois
+    // e reacende o estado que acabamos de limpar
+    reconhecedor.onresult = null;
+    reconhecedor.onerror = null;
+    reconhecedor.onend = null;
+    try { reconhecedor.abort(); } catch (e) {}
+    try { reconhecedor.stop(); } catch (e) {}
+    reconhecedor = null;
+  }
 }
 
+/**
+ * Escuta uma frase e desliga. É "aperta e fala", não microfone aberto:
+ * deixá-lo ligado fazia o jogo ouvir a própria voz dos personagens e
+ * responder a si mesmo em laço, além de captar tudo o que a criança
+ * falasse na sala.
+ */
 function ouvir() {
-  if (!ReconhecimentoVoz) {
-    falar('Fala comigo pelos botõezinhos! 💬', 2600, 'narrador');
+  // sem suporte ou permissão negada: segue no silêncio, os botões de
+  // figura continuam ali
+  if (!ReconhecimentoVoz || microfoneIndisponivel) {
+    if (!avisouDoMicrofone) {
+      avisouDoMicrofone = true;
+      falar('Pode falar comigo pelos botõezinhos! 💬', 2800, 'narrador');
+    }
     return;
   }
   if (ouvindo) { pararDeOuvir(); return; }
 
+  // não abre o microfone enquanto o jogo está falando, senão ele se ouve
+  if (window.speechSynthesis && speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+  }
+
   reconhecedor = new ReconhecimentoVoz();
   reconhecedor.lang = 'pt-BR';
+  reconhecedor.continuous = false;     // uma frase por toque
   reconhecedor.interimResults = false;
   reconhecedor.maxAlternatives = 1;
 
   reconhecedor.onresult = (ev) => {
     const frase = ev.results[0][0].transcript;
-    pararDeOuvir();
+    pararDeOuvir();                    // desliga ANTES de responder
     conversarCom(alvoDaConversa(), frase);
   };
   reconhecedor.onerror = (ev) => {
+    const negado = ev.error === 'not-allowed' || ev.error === 'service-not-allowed';
     pararDeOuvir();
-    // 'not-allowed' = microfone negado; o resto costuma ser ruído/silêncio
-    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-      falar('Não consegui usar o microfone. Usa os botõezinhos! 💬', 3200, 'narrador');
+    if (negado) {
+      // uma vez só: repetir isso a cada toque num bicho vira ruído
+      microfoneIndisponivel = true;
+      if (!avisouDoMicrofone) {
+        avisouDoMicrofone = true;
+        falar('Pode falar comigo pelos botõezinhos! 💬', 3200, 'narrador');
+      }
     }
   };
   reconhecedor.onend = () => pararDeOuvir();
@@ -2754,12 +2845,17 @@ function ouvir() {
     reconhecedor.start();
     ouvindo = true;
     el('microfone').classList.add('ouvindo');
+    // rede de segurança: se ninguém falar, o microfone não fica aberto
+    timerMicrofone = setTimeout(pararDeOuvir, 6000);
   } catch (e) {
     pararDeOuvir();
   }
 }
 
-el('microfone').addEventListener('click', ouvir);
+el('microfone').addEventListener('click', () => {
+  rodadasDeConversa = 0;   // toque manual recomeça o papo
+  ouvir();
+});
 
 // botões de figura: cada um manda uma frase pronta pela mesma via
 for (const btn of document.querySelectorAll('#papo button')) {
@@ -2842,7 +2938,8 @@ function colher(id) {
   avancar('colheu');
 }
 
-function carinho(tipo) {
+/** `calado` evita duas falas seguidas quando o toque também puxa conversa. */
+function carinho(tipo, calado = false) {
   const a = estado.animais.find(x => x.tipo === tipo);
   if (!a) return;
   const agora = Date.now();
@@ -2855,7 +2952,7 @@ function carinho(tipo) {
   // cada bicho no seu tom: a vaca grave, a galinha esganiçada
   const tomBicho = { galinha: 'cachorro', vaca: 'nenao', ovelha: 'manu', porco: 'nenao' };
   salvar(); atualizarHUD();
-  falar(`${info.nome}: ${falas[tipo]}`, 2600, tomBicho[tipo]);
+  if (!calado) falar(`${info.nome}: ${falas[tipo]}`, 2600, tomBicho[tipo]);
   avancar('carinho');
 }
 
@@ -2966,8 +3063,8 @@ function aoTocar(cx, cy) {
       const d = o.userData || {};
       if (d.tipo === 'canteiro') { tocarCanteiro(d.id); return; }
       if (d.tipo === 'animal') {
-        interlocutor = d.animal;   // passa a conversar com quem foi tocado
-        carinho(d.animal);
+        carinho(d.animal, true);   // ganha o coração, mas quem fala é o convite
+        puxarConversa(d.animal);   // ele chama a conversa e abre o microfone
         return;
       }
       if (d.tipo === 'camisa') { acharCamisa(); return; }
@@ -3272,7 +3369,8 @@ window.__jogo = {
   entradaCeleiro, portasCeleiro, casa, entrarNaCasa: pedirEntrarNaCasa, sairDaCasa,
   get atorAtivo() { return atorAtivo; },
   get orbita() { return orbita; },
-  conversarCom, responder, PERSONAS,
+  conversarCom, responder, PERSONAS, puxarConversa, CONVITES,
+  get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
 };
 
