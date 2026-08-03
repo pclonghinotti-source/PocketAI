@@ -407,9 +407,17 @@ cena.add(mundo);
 // A mesma fórmula é usada para apoiar os pés dos personagens; sem isso
 // eles andam em y=0 e afundam onde o terreno sobe.
 const RAIO_PLANO = 11;   // centro plano, onde ficam canteiros e construções
+// O centro do lago (8.5, 7) fica a ~11.01 do centro do mundo — bem na
+// borda do platô. Com o lago maior (raio 4.0 + borda 4.4), o lado mais
+// distante da origem caía na zona ondulada e "mordia" o círculo. Essa
+// constante precisa existir aqui, antes de LAGO_CENTRO/LAGO_POS serem
+// declaradas lá embaixo, porque a malha do terreno é montada na hora,
+// logo abaixo — por isso os valores são repetidos em vez de referenciados.
+const LAGO_FLAT = { x: 8.5, z: 7, raio: 5.0 };
 function alturaTerreno(x, z) {
   const d = Math.hypot(x, z);
-  if (d <= RAIO_PLANO) return 0;
+  const dLago = Math.hypot(x - LAGO_FLAT.x, z - LAGO_FLAT.z);
+  if (d <= RAIO_PLANO || dLago <= LAGO_FLAT.raio) return 0;
   const ondula = Math.sin(x * 0.16) * Math.cos(z * 0.14) * 0.9;
   // limita o quanto a borda sobe, senão vira montanha intransponível
   const fator = Math.min((d - RAIO_PLANO) / 9, 1.6);
@@ -999,24 +1007,28 @@ const PIER_PONTA = new THREE.Vector3(5.9, 0, 7);
   const g = new THREE.Group();
   const mTabua = new THREE.MeshStandardMaterial({ map: TEX_MADEIRA, roughness: 0.9 });
   const compr = PIER_PONTA.x - PIER_INICIO.x;
+  // Bug original (GLM): todos os Z abaixo eram relativos a 0, nunca
+  // somavam PIER_INICIO.z (7) — o deck inteiro renderizava 7 unidades
+  // longe do lago, num pedaço de grama vazio.
+  const pz = PIER_INICIO.z;
   // deck: ripas paralelas ao longo do pier
   for (let i = 0; i < 7; i++) {
     const ripa = caixa(compr, 0.06, 0.22, mTabua);
-    ripa.position.set(PIER_INICIO.x + compr / 2, 0.18, -0.66 + i * 0.22);
+    ripa.position.set(PIER_INICIO.x + compr / 2, 0.18, pz + (-0.66 + i * 0.22));
     g.add(ripa);
   }
   // postes de sustentação descendo até o fundo
   for (const px of [PIER_INICIO.x + 0.3, PIER_INICIO.x + compr * 0.5, PIER_PONTA.x - 0.2]) {
     for (const sz of [-0.55, 0.55]) {
       const poste = cilindro(0.05, 0.05, 0.5, mat(PALETA.madeiraEsc, { roughness: 0.95 }), 8);
-      poste.position.set(px, 0.0, sz);
+      poste.position.set(px, 0.0, pz + sz);
       g.add(poste);
     }
   }
   // borda lateral
   for (const sz of [-0.72, 0.72]) {
     const bordaPier = caixa(compr, 0.08, 0.06, mat(PALETA.madeiraEsc, { roughness: 0.9 }));
-    bordaPier.position.set(PIER_INICIO.x + compr / 2, 0.22, sz);
+    bordaPier.position.set(PIER_INICIO.x + compr / 2, 0.22, pz + sz);
     g.add(bordaPier);
   }
   g.userData = { tipo: 'pier' };
@@ -4526,6 +4538,7 @@ window.__jogo = {
   regar, encherRegador, sacudirArvore, arvoresFrutiferas, carinho,
   comecarChuva, borboletas, coracoes, NINHO_POS, LAGO_POS,
   peixesLago, PIER_INICIO, PIER_PONTA, LAGO_CENTRO, pedirPescar, pesca,
+  alturaTerreno, LAGO_FLAT,
   get chuva() { return chuva; },
   get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
