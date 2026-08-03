@@ -62,6 +62,7 @@ const MISSOES = [
   { id: 'carinho',  icone: '🐄', titulo: 'Faça carinho em 3 bichinhos', alvo: 3, evento: 'carinho', premio: 4, onde: 'animais' },
   { id: 'ovo',      icone: '🥚', titulo: 'Pegue um ovinho no chão', alvo: 1, evento: 'pegouOvo',   premio: 3, onde: 'ovo' },
   { id: 'fruta',    icone: '🍎', titulo: 'Pegue 2 frutinhas que caíram', alvo: 2, evento: 'colheuFruta', premio: 4, onde: 'fruta' },
+  { id: 'peixe',    icone: '🐟', titulo: 'Pesque 1 peixinho no lago!', alvo: 1, evento: 'pescou', premio: 4, onde: 'pesca' },
   { id: 'camisa',   icone: '👕', titulo: 'Ache a camisa do Nenão', alvo: 1, evento: 'achouCamisa', premio: 5, onde: 'camisa' },
   { id: 'colher5',  icone: '🧺', titulo: 'Colha 5 plantinhas',  alvo: 5, evento: 'colheu',         premio: 5, onde: 'canteiros' },
 ];
@@ -88,6 +89,7 @@ const estado = {
   totalColheitas: 0,
   regasFeitas: 0,
   carinhosFeitos: 0,
+  peixesPescados: 0,
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -878,8 +880,10 @@ for (const [x, z, s, fruta] of ARVORES) arvore(x, z, s, fruta);
 
 // ── Lago ──────────────────────────────────────────────────────
 {
+  // Círculo cheio (CircleGeometry sempre fecha 360°) e maior que antes —
+  // era raio 2.6, foi para 4.0.
   const lago = new THREE.Mesh(
-    new THREE.CircleGeometry(2.6, 32),
+    new THREE.CircleGeometry(4.0, 40),
     mat(PALETA.agua, { roughness: 0.15, metalness: 0.35, transparent: true, opacity: 0.9 })
   );
   lago.rotation.x = -Math.PI / 2;
@@ -888,10 +892,301 @@ for (const [x, z, s, fruta] of ARVORES) arvore(x, z, s, fruta);
   lago.userData = { tipo: 'lago' };   // tocar aqui enche o regador
   mundo.add(lago);
   // borda de terra
-  const borda = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.0, 32), mat(PALETA.terraEsc, { roughness: 1 }));
+  const borda = new THREE.Mesh(new THREE.RingGeometry(4.0, 4.4, 40), mat(PALETA.terraEsc, { roughness: 1 }));
   borda.rotation.x = -Math.PI / 2;
   borda.position.set(8.5, 0.02, 7);
   mundo.add(borda);
+}
+
+// ── Peixinhos nadando no lago ──────────────────────────────────
+// Peixes 3D simples: corpo alongado + barbatanas. Nadam em círculos sob
+// a superfície, em raios e velocidades diferentes — o que dá a
+// impressão de um cardume vivo sem precisar de IA complexa.
+const LAGO_CENTRO = new THREE.Vector3(8.5, 0, 7);
+const PEIXE_CORES = [0xf07028, 0xe8c020, 0xd83030, 0x28a0d8, 0xf0a020];
+const peixesLago = [];
+
+/**
+ * Corpo do peixe, compartilhado entre quem nada no lago e quem é fisgado
+ * na pescaria. Peixe de verdade é achatado dos LADOS (fino em X, alto em
+ * Y) — a versão anterior fazia o oposto: `esfera(..., achatamento)`
+ * esmagava a altura (Y) e as barbatanas tinham `scale.y` quase zero, o
+ * que deixava tudo com cara de disco boiando na superfície em vez de
+ * peixe nadando de pé.
+ */
+function criarModeloPeixe(cor, escala = 1) {
+  const g = new THREE.Group();
+  const mCorpo = mat(cor, { roughness: 0.35, metalness: 0.3 });
+
+  const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.15 * escala, 14, 10), mCorpo);
+  corpo.scale.set(0.62, 1.05, 1.85);   // fino nos lados, altura normal, comprido
+  corpo.castShadow = true;
+  g.add(corpo);
+
+  // barbatana caudal: leque VERTICAL atrás do corpo (alto em Y, fino em X)
+  const barba = new THREE.Mesh(new THREE.ConeGeometry(0.15 * escala, 0.26 * escala, 4), mCorpo);
+  barba.rotation.x = Math.PI / 2;      // deita o eixo do cone para trás (Z)
+  barba.scale.set(0.16, 1.15, 0.75);   // fino em X, ALTO em Y — antes era o inverso
+  barba.position.z = -0.30 * escala;
+  g.add(barba);
+
+  // barbatana dorsal: espinha vertical no topo, não um caroço achatado
+  const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.055 * escala, 0.16 * escala, 4), mCorpo);
+  dorsal.scale.set(0.35, 1, 0.7);
+  dorsal.position.set(0, 0.155 * escala, -0.02);
+  g.add(dorsal);
+
+  // nadadeiras peitorais, uma de cada lado
+  for (const lado of [-1, 1]) {
+    const peit = new THREE.Mesh(new THREE.ConeGeometry(0.04 * escala, 0.09 * escala, 4), mCorpo);
+    peit.rotation.z = lado * (Math.PI / 2.3);
+    peit.position.set(lado * 0.13 * escala, -0.01, 0.10 * escala);
+    g.add(peit);
+  }
+
+  const olho = esfera(0.026 * escala, mat(0x1a1a1a, { roughness: 0.2 }), 1);
+  olho.position.set(0.065 * escala, 0.05 * escala, 0.17 * escala);
+  g.add(olho);
+
+  return { grupo: g, corpo, barba };
+}
+
+function criarPeixe(cor, raioCirc, velocidade, yNivel, faseIni) {
+  const { grupo: g, corpo, barba } = criarModeloPeixe(cor);
+  g.position.set(LAGO_CENTRO.x + raioCirc, yNivel, LAGO_CENTRO.z);
+  mundo.add(g);
+  peixesLago.push({
+    node: g, corpo, barba,
+    raio: raioCirc, vel: velocidade, angulo: faseIni, y: yNivel,
+  });
+  return g;
+}
+// nadam alguns centímetros ABAIXO da superfície (y=0.03) — visíveis
+// através da água, mas claramente submersos, não boiando em cima
+for (let i = 0; i < 5; i++) {
+  criarPeixe(
+    PEIXE_CORES[i % PEIXE_CORES.length],
+    0.6 + Math.random() * 2.6,
+    0.4 + Math.random() * 0.5,
+    -0.05 - Math.random() * 0.30,
+    Math.random() * Math.PI * 2,
+  );
+}
+
+function atualizarPeixes(dt, t) {
+  for (const p of peixesLago) {
+    p.angulo += p.vel * dt;
+    p.node.position.x = LAGO_CENTRO.x + Math.cos(p.angulo) * p.raio;
+    p.node.position.z = LAGO_CENTRO.z + Math.sin(p.angulo) * p.raio;
+    p.node.position.y = p.y + Math.sin(t * 2 + p.angulo * 3) * 0.03;
+    // olha para onde nada
+    p.node.rotation.y = -p.angulo + Math.PI / 2;
+    // barbatana balança
+    p.barba.rotation.z = Math.sin(t * 8 + p.angulo * 2) * 0.3;
+  }
+}
+
+// ── Pier (deck de madeira) no lago ─────────────────────────────
+// Pontezinha de tábuas que avança sobre a água. A ponta é o ponto
+// de pesca — tocar no deck leva o personagem até lá.
+//
+// Coordenadas recalculadas para o lago maior (raio 4.0, centro em
+// x=8.5): a entrada fica 0.5 além da margem (em terra) e a ponta entra
+// 1.4 unidade dentro d'água — antes a ponta mal encostava na beira.
+const PIER_INICIO = new THREE.Vector3(4.0, 0, 7);
+const PIER_PONTA = new THREE.Vector3(5.9, 0, 7);
+{
+  const g = new THREE.Group();
+  const mTabua = new THREE.MeshStandardMaterial({ map: TEX_MADEIRA, roughness: 0.9 });
+  const compr = PIER_PONTA.x - PIER_INICIO.x;
+  // deck: ripas paralelas ao longo do pier
+  for (let i = 0; i < 7; i++) {
+    const ripa = caixa(compr, 0.06, 0.22, mTabua);
+    ripa.position.set(PIER_INICIO.x + compr / 2, 0.18, -0.66 + i * 0.22);
+    g.add(ripa);
+  }
+  // postes de sustentação descendo até o fundo
+  for (const px of [PIER_INICIO.x + 0.3, PIER_INICIO.x + compr * 0.5, PIER_PONTA.x - 0.2]) {
+    for (const sz of [-0.55, 0.55]) {
+      const poste = cilindro(0.05, 0.05, 0.5, mat(PALETA.madeiraEsc, { roughness: 0.95 }), 8);
+      poste.position.set(px, 0.0, sz);
+      g.add(poste);
+    }
+  }
+  // borda lateral
+  for (const sz of [-0.72, 0.72]) {
+    const bordaPier = caixa(compr, 0.08, 0.06, mat(PALETA.madeiraEsc, { roughness: 0.9 }));
+    bordaPier.position.set(PIER_INICIO.x + compr / 2, 0.22, sz);
+    g.add(bordaPier);
+  }
+  g.userData = { tipo: 'pier' };
+  mundo.add(g);
+}
+
+// ── Mecânica de pesca ──────────────────────────────────────────
+// Estado da pescaria: ociosa → indo (caminha até o pier) → esperando
+// (linha na água) → mordeu (espirro) → puxando (peixe sobe) → pronto.
+// Depois de pescar, um cooldown impede spam de toques.
+const pesca = {
+  fase: 'ociosa',
+  t: 0,
+  cooldownAte: 0,
+  vara: null,
+  linha: null,
+  peixeNaLinha: null,
+  tempoMordida: 0,
+};
+
+function pedirPescar() {
+  if (pesca.fase !== 'ociosa') return;
+  if (performance.now() < pesca.cooldownAte) {
+    falar('Ainda não tem peixe na isca… espera um pouquinho! 🐟', 2600);
+    return;
+  }
+  if (casa.fase !== 'fora') { falar('Saia do celeiro pra pescar! 🚪', 2200); return; }
+  pesca.fase = 'indo';
+  pesca.t = 0;
+  destino = PIER_PONTA.clone();
+  falar('Vou pescar! 🎣', 2200);
+}
+
+function iniciarPescaria() {
+  pesca.fase = 'esperando';
+  pesca.t = 0;
+  pesca.tempoMordida = 2 + Math.random() * 2.5;
+  // cria a vara de pescar ao lado do personagem
+  const ator = ATORES[atorAtivo].node;
+  pesca.vara = new THREE.Group();
+  const cabo = cilindro(0.018, 0.022, 1.4, mat(0x8a5a2b, { roughness: 0.7 }), 8);
+  cabo.position.y = 0.7;
+  pesca.vara.add(cabo);
+  // linha: cilindro fino que desce até a água
+  pesca.linha = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.004, 0.004, 1.0, 4),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })
+  );
+  pesca.linha.position.set(0, -0.3, 0.3);
+  pesca.vara.add(pesca.linha);
+  // posiciona a vara ao lado do personagem, inclinada sobre a água
+  pesca.vara.position.copy(ator.position);
+  pesca.vara.position.y += 0.6;
+  pesca.vara.rotation.set(0, ator.rotation.y, -0.3);
+  mundo.add(pesca.vara);
+  falar('Lancei a linha… vamos ver se o peixinho morde! 🎣', 3000);
+}
+
+function mordidaPeixe() {
+  pesca.fase = 'mordeu';
+  pesca.t = 0;
+  // espirro d'água no ponto da linha
+  const ator = ATORES[atorAtivo].node;
+  const px = ator.position.x + Math.sin(ator.rotation.y) * 1.2;
+  const pz = ator.position.z + Math.cos(ator.rotation.y) * 1.2;
+  for (let i = 0; i < 12; i++) {
+    const g = esfera(0.04 + Math.random() * 0.03, mat(0x8fd4f0, { roughness: 0.2 }), 1.2);
+    const a = Math.random() * Math.PI * 2;
+    g.position.set(px + Math.cos(a) * 0.3, 0.15, pz + Math.sin(a) * 0.3);
+    g.userData = { vy: 1.2 + Math.random() * 1.0 };
+    mundo.add(g);
+    respingos.push({ node: g, vida: 0.9 });
+  }
+  falar('Mordeu! Puxa, puxa! 🐟', 2000);
+}
+
+function puxarPeixe() {
+  pesca.fase = 'puxando';
+  pesca.t = 0;
+  // cria o peixe na ponta da linha, com o mesmo corpo vertical dos que
+  // nadam no lago (mesma correção: barbatanas de pé, não deitadas)
+  const cor = PEIXE_CORES[Math.floor(Math.random() * PEIXE_CORES.length)];
+  const { grupo } = criarModeloPeixe(cor, 0.9);
+  pesca.peixeNaLinha = grupo;
+  // começa na água e vai subir
+  const ator = ATORES[atorAtivo].node;
+  pesca.peixeNaLinha.position.set(
+    ator.position.x + Math.sin(ator.rotation.y) * 1.2,
+    0.1,
+    ator.position.z + Math.cos(ator.rotation.y) * 1.2
+  );
+  pesca.peixeNaLinha.userData = { yAlvo: ator.position.y + 0.8, yInicio: 0.1 };
+  mundo.add(pesca.peixeNaLinha);
+}
+
+function finalizarPesca() {
+  estado.peixesPescados = (estado.peixesPescados || 0) + 1;
+  estado.cesta++;
+  estado.estrelas += 2;
+  salvar(); atualizarHUD();
+  falar('Pesquei um peixinho! 🐟✨', 2800);
+  avancar('pescou');
+  // remove os elementos da pescaria
+  if (pesca.vara) { mundo.remove(pesca.vara); pesca.vara = null; }
+  if (pesca.peixeNaLinha) { mundo.remove(pesca.peixeNaLinha); pesca.peixeNaLinha = null; }
+  pesca.linha = null;
+  pesca.fase = 'ociosa';
+  pesca.cooldownAte = performance.now() + 8000;
+  // confete pequeno
+  festa();
+}
+
+function atualizarPesca(dt, t) {
+  if (pesca.fase === 'ociosa') return;
+  const ator = ATORES[atorAtivo].node;
+
+  switch (pesca.fase) {
+    case 'indo': {
+      pesca.t += dt;
+      const d = Math.hypot(ator.position.x - PIER_PONTA.x, ator.position.z - PIER_PONTA.z);
+      if (d < 0.5) {
+        destino = null;
+        // vira de frente pro lago (olhando para +X)
+        ator.rotation.y = Math.PI / 2;
+        iniciarPescaria();
+      } else if (pesca.t > 10) {
+        pesca.fase = 'ociosa';
+      }
+      break;
+    }
+    case 'esperando': {
+      pesca.t += dt;
+      // linha balança de leve na água
+      if (pesca.linha) {
+        pesca.linha.scale.y = 1 + Math.sin(t * 3) * 0.04;
+      }
+      if (pesca.t >= pesca.tempoMordida) mordidaPeixe();
+      break;
+    }
+    case 'mordeu': {
+      pesca.t += dt;
+      // linha puxa para baixo (o peixe puxa!)
+      if (pesca.linha) {
+        pesca.linha.scale.y = 1 + Math.sin(pesca.t * 20) * 0.12;
+      }
+      if (pesca.t > 0.6) puxarPeixe();
+      break;
+    }
+    case 'puxando': {
+      pesca.t += dt;
+      // peixe sobe da água até a altura da vara
+      if (pesca.peixeNaLinha) {
+        const ud = pesca.peixeNaLinha.userData;
+        const p = Math.min(pesca.t / 0.8, 1);
+        pesca.peixeNaLinha.position.y = ud.yInicio + (ud.yAlvo - ud.yInicio) * p;
+        // balança na linha
+        pesca.peixeNaLinha.rotation.z = Math.sin(pesca.t * 12) * 0.4;
+        pesca.peixeNaLinha.rotation.x = Math.sin(pesca.t * 8) * 0.2;
+      }
+      if (pesca.t > 0.9) finalizarPesca();
+      break;
+    }
+  }
+
+  // a vara acompanha o personagem
+  if (pesca.vara) {
+    pesca.vara.position.copy(ator.position);
+    pesca.vara.position.y += 0.6;
+    pesca.vara.rotation.y = ator.rotation.y;
+  }
 }
 
 // ── Cercas ────────────────────────────────────────────────────
@@ -1669,7 +1964,9 @@ mundo.add(dalmata);
 // Registrados depois que tudo existe, para bater com as posições reais.
 addObstaculo(-7.5, -5.5, 2.6);      // celeiro
 addObstaculo(-2.5, -11.5, 1.9);     // moinho
-addObstaculo(8.5, 7, 3.0);          // lago
+// raio de colisão menor que o raio visual (4.0) e menor que a distância
+// até a ponta do pier (2.6), senão ela nunca conseguiria chegar lá
+addObstaculo(8.5, 7, 2.3);          // lago
 for (const [x, z, s] of [[-11, -1, 1.1], [-9.5, 5, 0.9], [10.5, -3, 1.15],
                          [12, 4, 0.95], [6, -9, 1.0], [-4, -11, 1.05], [-13, -8, 0.85]]) {
   addObstaculo(x, z, 0.5 * s);      // troncos das árvores
@@ -2492,7 +2789,7 @@ function atualizarCasa(dt) {
 
 const CAPACIDADE_REGADOR = 3;
 const LAGO_POS = new THREE.Vector3(8.5, 0, 7);
-const LAGO_RAIO = 3.0;
+const LAGO_RAIO = 4.0;   // acompanha o raio visual do lago
 
 function aguaNoRegador() {
   if (estado.agua === undefined) estado.agua = CAPACIDADE_REGADOR;
@@ -2954,6 +3251,7 @@ function alvoDaMissao() {
     }
     case 'ovo':       return ovosNoChao.length ? ovosNoChao[0].node.position : null;
     case 'fruta':     return frutasNoChao.length ? frutasNoChao[0].node.position : null;
+    case 'pesca':     return PIER_PONTA;
     case 'camisa':    return camisaMesh ? camisaMesh.position : null;
     default: return null;
   }
@@ -3177,9 +3475,10 @@ const PEDIDOS = {
   nenao: [
     { id: 'fruta',  evento: 'colheuFruta', pede: 'Urso gosta de fruta… pega uma pra mim? 🍎',          cobra: 'Hmmm… cadê minha frutinha?',      agradece: 'Ahhh! Obrigado! Urso feliz! 🐻', premio: 4 },
     { id: 'planta', evento: 'colheu',      pede: 'Você colhe uma plantinha pra mostrar pro Nenão?',    cobra: 'Ainda quero ver a plantinha…',    agradece: 'Que plantinha bonita! Você é demais! 🌻', premio: 4 },
+    { id: 'peixe',  evento: 'pescou',      pede: 'Urso gosta de peixe! Pesca um pra mim? 🐟',          cobra: 'Hmmm… cadê meu peixinho?',        agradece: 'Grrr! Que peixe gostoso! Obrigado! 🐻', premio: 4 },
   ],
   cachorro: [
-    { id: 'carinho', evento: 'carinho',    pede: 'Au au! Faz carinho em algum bichinho? Eu quero ver!', cobra: 'Au? Cadê o carinho?',            agradece: 'AU AU! Você é boazinha! 🐶', premio: 3 },
+    { id: 'carinho', evento: 'carinho',    pede: 'Au au! Faz carinho em algum bichinho? Eu quero ver!', cobra: 'Au? Cadê o carinho?', agradece: 'AU AU! Você é boazinha! 🐶', premio: 3 },
     { id: 'ovo',    evento: 'pegouOvo',    pede: 'Au! Acha um ovinho no chão pra mim?',                cobra: 'Au au! E o ovinho?',              agradece: 'Au au au! Achou! Que esperta! 🥚', premio: 4 },
   ],
 };
@@ -3882,6 +4181,7 @@ function aoTocar(cx, cy) {
       if (d.tipo === 'fruta') { colherFruta(o); return; }
       if (d.tipo === 'portaCeleiro') { pedirEntrarNaCasa(); return; }
       if (d.tipo === 'lago') { encherRegador(); return; }
+      if (d.tipo === 'pier') { pedirPescar(); return; }
       if (d.tipo === 'tronco') { sacudirArvore(o); return; }
       if (d.tipo === 'ninho') { falar('É o ninho da galinha! Ela bota os ovinhos aqui 🥚', 3000); return; }
       o = o.parent;
@@ -4073,6 +4373,8 @@ function tick() {
   atualizarRespingos(dt);
   atualizarChuva(dt, t);
   atualizarBorboletas(dt, t);
+  atualizarPeixes(dt, t);
+  atualizarPesca(dt, t);
 
   // Ovos: a galinha bota onde ela estiver, e o ovo fica no chão para
   // ser recolhido — em vez de virar só um número no HUD.
@@ -4223,6 +4525,7 @@ window.__jogo = {
   tarefas, mandarBuscar, mandarRegar, mandarColher,
   regar, encherRegador, sacudirArvore, arvoresFrutiferas, carinho,
   comecarChuva, borboletas, coracoes, NINHO_POS, LAGO_POS,
+  peixesLago, PIER_INICIO, PIER_PONTA, LAGO_CENTRO, pedirPescar, pesca,
   get chuva() { return chuva; },
   get ouvindo() { return ouvindo; },
   irPara: (x, z) => { destino = new THREE.Vector3(x, 0, z); },
